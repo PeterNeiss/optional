@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <optional>
 #include <vector>
 #include <random>
 #include <numeric>
@@ -50,7 +51,7 @@ double benchmark(const char* name, Func&& func, size_t iterations = 1000000) {
 }
 
 int main() {
-    std::cout << "Sentinel-Based Optional: Performance Benchmarks\n";
+    std::cout << "slim_optional: Performance Benchmarks\n";
     std::cout << "================================================\n\n";
 
     std::cout << "Note: Lower times are better. All benchmarks run 1,000,000 iterations.\n\n";
@@ -64,50 +65,50 @@ int main() {
 
     int dummy = 42;
 
-    benchmark("Bool-based: default construction", [](size_t n) {
+    benchmark("std::optional: default construction", [](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*> opt;
+            std::optional<int*> opt;
             do_not_optimize(opt);
         }
     });
 
-    benchmark("Sentinel: default construction", [](size_t n) {
+    benchmark("slim_optional: default construction", [](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt;
-            do_not_optimize(opt);
-        }
-    });
-
-    std::cout << "\n";
-
-    benchmark("Bool-based: value construction", [&](size_t n) {
-        for (size_t i = 0; i < n; ++i) {
-            optional<int*> opt(&dummy);
-            do_not_optimize(opt);
-        }
-    });
-
-    benchmark("Sentinel: value construction", [&](size_t n) {
-        for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt(&dummy);
+            slim_optional<int*, nullptr> opt;
             do_not_optimize(opt);
         }
     });
 
     std::cout << "\n";
 
-    benchmark("Bool-based: copy construction", [&](size_t n) {
-        optional<int*> src(&dummy);
+    benchmark("std::optional: value construction", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*> opt(src);
+            std::optional<int*> opt(&dummy);
             do_not_optimize(opt);
         }
     });
 
-    benchmark("Sentinel: copy construction", [&](size_t n) {
-        optional<int*, nullptr> src(&dummy);
+    benchmark("slim_optional: value construction", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt(src);
+            slim_optional<int*, nullptr> opt(&dummy);
+            do_not_optimize(opt);
+        }
+    });
+
+    std::cout << "\n";
+
+    benchmark("std::optional: copy construction", [&](size_t n) {
+        std::optional<int*> src(&dummy);
+        for (size_t i = 0; i < n; ++i) {
+            std::optional<int*> opt(src);
+            do_not_optimize(opt);
+        }
+    });
+
+    benchmark("slim_optional: copy construction", [&](size_t n) {
+        slim_optional<int*, nullptr> src(&dummy);
+        for (size_t i = 0; i < n; ++i) {
+            slim_optional<int*, nullptr> opt(src);
             do_not_optimize(opt);
         }
     });
@@ -121,16 +122,16 @@ int main() {
     std::cout << "Assignment Performance\n";
     std::cout << std::string(77, '-') << "\n";
 
-    benchmark("Bool-based: value assignment", [&](size_t n) {
-        optional<int*> opt;
+    benchmark("std::optional: value assignment", [&](size_t n) {
+        std::optional<int*> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = &dummy;
             do_not_optimize(opt);
         }
     });
 
-    benchmark("Sentinel: value assignment", [&](size_t n) {
-        optional<int*, nullptr> opt;
+    benchmark("slim_optional: value assignment", [&](size_t n) {
+        slim_optional<int*, nullptr> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = &dummy;
             do_not_optimize(opt);
@@ -139,16 +140,16 @@ int main() {
 
     std::cout << "\n";
 
-    benchmark("Bool-based: nullopt assignment", [](size_t n) {
-        optional<int*> opt;
+    benchmark("std::optional: nullopt assignment", [](size_t n) {
+        std::optional<int*> opt;
         for (size_t i = 0; i < n; ++i) {
-            opt = nullopt;
+            opt = std::nullopt;
             do_not_optimize(opt);
         }
     });
 
-    benchmark("Sentinel: nullopt assignment", [](size_t n) {
-        optional<int*, nullptr> opt;
+    benchmark("slim_optional: nullopt assignment", [](size_t n) {
+        slim_optional<int*, nullptr> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = nullopt;
             do_not_optimize(opt);
@@ -164,8 +165,8 @@ int main() {
     std::cout << "has_value() Performance\n";
     std::cout << std::string(77, '-') << "\n";
 
-    benchmark("Bool-based: has_value() check", [&](size_t n) {
-        optional<int*> opt(&dummy);
+    benchmark("std::optional: has_value() check", [&](size_t n) {
+        std::optional<int*> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = opt.has_value();
@@ -173,8 +174,8 @@ int main() {
         }
     });
 
-    benchmark("Sentinel: has_value() check", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+    benchmark("slim_optional: has_value() check", [&](size_t n) {
+        slim_optional<int*, nullptr> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = opt.has_value();
@@ -191,8 +192,8 @@ int main() {
     std::cout << "Value Access Performance\n";
     std::cout << std::string(77, '-') << "\n";
 
-    benchmark("Bool-based: operator* access", [&](size_t n) {
-        optional<int*> opt(&dummy);
+    benchmark("std::optional: operator* access", [&](size_t n) {
+        std::optional<int*> opt(&dummy);
         volatile int* result;
         for (size_t i = 0; i < n; ++i) {
             result = *opt;
@@ -200,8 +201,8 @@ int main() {
         }
     });
 
-    benchmark("Sentinel: operator* access", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+    benchmark("slim_optional: operator* access", [&](size_t n) {
+        slim_optional<int*, nullptr> opt(&dummy);
         volatile int* result;
         for (size_t i = 0; i < n; ++i) {
             result = *opt;
@@ -211,10 +212,10 @@ int main() {
 
     std::cout << "\n";
 
-    benchmark("Bool-based: operator-> access", [&](size_t n) {
+    benchmark("std::optional: operator-> access", [&](size_t n) {
         struct S { int value; };
         S s{42};
-        optional<S*> opt(&s);
+        std::optional<S*> opt(&s);
         volatile int result;
         for (size_t i = 0; i < n; ++i) {
             result = (*opt)->value;
@@ -222,10 +223,10 @@ int main() {
         }
     });
 
-    benchmark("Sentinel: operator-> access", [&](size_t n) {
+    benchmark("slim_optional: operator-> access", [&](size_t n) {
         struct S { int value; };
         S s{42};
-        optional<S*, nullptr> opt(&s);
+        slim_optional<S*, nullptr> opt(&s);
         volatile int result;
         for (size_t i = 0; i < n; ++i) {
             result = (*opt)->value;
@@ -242,9 +243,9 @@ int main() {
     std::cout << "Comparison Performance\n";
     std::cout << std::string(77, '-') << "\n";
 
-    benchmark("Bool-based: equality comparison", [&](size_t n) {
-        optional<int*> opt1(&dummy);
-        optional<int*> opt2(&dummy);
+    benchmark("std::optional: equality comparison", [&](size_t n) {
+        std::optional<int*> opt1(&dummy);
+        std::optional<int*> opt2(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt1 == opt2);
@@ -252,9 +253,9 @@ int main() {
         }
     });
 
-    benchmark("Sentinel: equality comparison", [&](size_t n) {
-        optional<int*, nullptr> opt1(&dummy);
-        optional<int*, nullptr> opt2(&dummy);
+    benchmark("slim_optional: equality comparison", [&](size_t n) {
+        slim_optional<int*, nullptr> opt1(&dummy);
+        slim_optional<int*, nullptr> opt2(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt1 == opt2);
@@ -264,17 +265,17 @@ int main() {
 
     std::cout << "\n";
 
-    benchmark("Bool-based: nullopt comparison", [&](size_t n) {
-        optional<int*> opt(&dummy);
+    benchmark("std::optional: nullopt comparison", [&](size_t n) {
+        std::optional<int*> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
-            result = (opt == nullopt);
+            result = (opt == std::nullopt);
             do_not_optimize(result);
         }
     });
 
-    benchmark("Sentinel: nullopt comparison", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+    benchmark("slim_optional: nullopt comparison", [&](size_t n) {
+        slim_optional<int*, nullptr> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt == nullopt);
@@ -291,16 +292,16 @@ int main() {
     std::cout << "Monadic Operations Performance\n";
     std::cout << std::string(77, '-') << "\n";
 
-    benchmark("Bool-based: transform", [&](size_t n) {
-        optional<int*> opt(&dummy);
+    benchmark("std::optional: transform", [&](size_t n) {
+        std::optional<int*> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
             auto result = opt.transform([](int* p) { return p; });
             do_not_optimize(result);
         }
     });
 
-    benchmark("Sentinel: transform", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+    benchmark("slim_optional: transform", [&](size_t n) {
+        slim_optional<int*, nullptr> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
             auto result = opt.transform([](int* p) { return p; });
             do_not_optimize(result);
@@ -309,18 +310,18 @@ int main() {
 
     std::cout << "\n";
 
-    benchmark("Bool-based: and_then", [&](size_t n) {
-        optional<int*> opt(&dummy);
+    benchmark("std::optional: and_then", [&](size_t n) {
+        std::optional<int*> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
-            auto result = opt.and_then([](int* p) -> optional<int*> { return p; });
+            auto result = opt.and_then([](int* p) -> std::optional<int*> { return p; });
             do_not_optimize(result);
         }
     });
 
-    benchmark("Sentinel: and_then", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+    benchmark("slim_optional: and_then", [&](size_t n) {
+        slim_optional<int*, nullptr> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
-            auto result = opt.and_then([](int* p) -> optional<int*, nullptr> { return p; });
+            auto result = opt.and_then([](int* p) -> slim_optional<int*, nullptr> { return p; });
             do_not_optimize(result);
         }
     });
@@ -336,8 +337,8 @@ int main() {
 
     const size_t container_size = 10000;
 
-    benchmark("Bool-based: vector iteration", [&](size_t n) {
-        std::vector<optional<int*>> vec(container_size, &dummy);
+    benchmark("std::optional: vector iteration", [&](size_t n) {
+        std::vector<std::optional<int*>> vec(container_size, &dummy);
         for (size_t i = 0; i < n / container_size; ++i) {
             size_t sum = 0;
             for (const auto& opt : vec) {
@@ -349,8 +350,8 @@ int main() {
         }
     }, container_size);
 
-    benchmark("Sentinel: vector iteration", [&](size_t n) {
-        std::vector<optional<int*, nullptr>> vec(container_size, &dummy);
+    benchmark("slim_optional: vector iteration", [&](size_t n) {
+        std::vector<slim_optional<int*, nullptr>> vec(container_size, &dummy);
         for (size_t i = 0; i < n / container_size; ++i) {
             size_t sum = 0;
             for (const auto& opt : vec) {
@@ -371,28 +372,28 @@ int main() {
     std::cout << "Mixed Usage Pattern (create, check, access, reset)\n";
     std::cout << std::string(77, '-') << "\n";
 
-    benchmark("Bool-based: mixed pattern", [&](size_t n) {
+    benchmark("std::optional: mixed pattern", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*> opt(&dummy);    // Create
-            bool has = opt.has_value();     // Check
+            std::optional<int*> opt(&dummy);   // Create
+            bool has = opt.has_value();        // Check
             if (has) {
-                int* val = *opt;            // Access
+                int* val = *opt;               // Access
                 do_not_optimize(val);
             }
-            opt.reset();                    // Reset
+            opt.reset();                       // Reset
             do_not_optimize(opt);
         }
     });
 
-    benchmark("Sentinel: mixed pattern", [&](size_t n) {
+    benchmark("slim_optional: mixed pattern", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt(&dummy);  // Create
-            bool has = opt.has_value();           // Check
+            slim_optional<int*, nullptr> opt(&dummy);  // Create
+            bool has = opt.has_value();                // Check
             if (has) {
-                int* val = *opt;                  // Access
+                int* val = *opt;                       // Access
                 do_not_optimize(val);
             }
-            opt.reset();                          // Reset
+            opt.reset();                               // Reset
             do_not_optimize(opt);
         }
     });
@@ -408,8 +409,8 @@ int main() {
 
     const size_t cache_size = 100000;
 
-    double bool_time = benchmark("Bool-based: sequential sum", [&](size_t n) {
-        std::vector<optional<int>> vec(cache_size);
+    double std_time = benchmark("std::optional: sequential sum", [&](size_t n) {
+        std::vector<std::optional<int>> vec(cache_size);
         for (size_t i = 0; i < cache_size; ++i) {
             vec[i] = static_cast<int>(i);
         }
@@ -425,8 +426,8 @@ int main() {
         }
     }, cache_size);
 
-    double sentinel_time = benchmark("Sentinel: sequential sum", [&](size_t n) {
-        std::vector<optional<int, -1>> vec(cache_size);
+    double slim_time = benchmark("slim_optional: sequential sum", [&](size_t n) {
+        std::vector<slim_optional<int, -1>> vec(cache_size);
         for (size_t i = 0; i < cache_size; ++i) {
             vec[i] = static_cast<int>(i);
         }
@@ -444,7 +445,7 @@ int main() {
 
     std::cout << "\nCache effect speedup: "
               << std::fixed << std::setprecision(2)
-              << (bool_time / sentinel_time) << "x\n";
+              << (std_time / slim_time) << "x\n";
 
     std::cout << "\n\n";
 
@@ -459,9 +460,9 @@ int main() {
     std::cout << "- has_value(): Comparison vs bool load (similar)\n";
     std::cout << "- Value access: Identical (no checking)\n";
     std::cout << "- Memory access: Better cache utilization due to smaller size\n";
-    std::cout << "- Overall: Sentinel-based is equivalent or better\n\n";
+    std::cout << "- Overall: slim_optional is equivalent or better\n\n";
 
-    std::cout << "Key takeaway: Sentinel-based optional provides significant memory\n";
+    std::cout << "Key takeaway: slim_optional provides significant memory\n";
     std::cout << "savings (50%) with no performance penalty, and often better cache\n";
     std::cout << "performance due to smaller size.\n";
 

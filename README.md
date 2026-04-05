@@ -28,22 +28,22 @@ std::optional<int*, nullptr> ptr;
 
 ```
 optional-cpp-paper/
-├── proposal.md                      # Main WG21 proposal (C++29 target)
-├── README.md                        # This file
-├── SUMMARY.md                       # Project summary and status
-├── BENCHMARK_RESULTS.md             # Detailed benchmark data
-├── VERIFICATION.md                  # Multi-compiler verification
-├── Makefile                         # Build system (GCC + Clang)
-├── reference-impl/
-│   ├── optional.hpp                 # Complete implementation (857 lines)
-│   ├── examples.cpp                 # 13 usage examples (350 lines)
-│   └── tests.cpp                   # 51 comprehensive tests (1100 lines)
-├── benchmarks/
-│   ├── memory_usage.cpp            # Memory analysis (250 lines)
-│   └── performance.cpp             # Performance benchmarks (450 lines)
-└── supplementary/
-    ├── abi_analysis.md             # ABI compatibility (350 lines)
-    └── migration_guide.md          # Migration guide (600 lines)
+|-- proposal.md                      # Main WG21 proposal (C++29 target)
+|-- README.md                        # This file
+|-- SUMMARY.md                       # Project summary and status
+|-- BENCHMARK_RESULTS.md             # Detailed benchmark data
+|-- VERIFICATION.md                  # Multi-compiler verification
+|-- Makefile                         # Build system (GCC + Clang)
+|-- reference-impl/
+|   |-- optional.hpp                 # Complete implementation (857 lines)
+|   |-- examples.cpp                 # 13 usage examples (350 lines)
+|   +-- tests.cpp                   # 51 comprehensive tests (1100 lines)
+|-- benchmarks/
+|   |-- memory_usage.cpp            # Memory analysis (250 lines)
+|   +-- performance.cpp             # Performance benchmarks (450 lines)
++-- supplementary/
+    |-- abi_analysis.md             # ABI compatibility (350 lines)
+    +-- migration_guide.md          # Migration guide (600 lines)
 
 Total: ~5,200 lines of code and documentation
 ```
@@ -85,8 +85,8 @@ make clean      # Clean build artifacts
 ```
 
 **Verified to compile and run successfully with:**
-- ✅ GCC 15.2.0
-- ✅ Clang 18.1.3
+- GCC 15.2.0
+- Clang 18.1.3
 
 ### Basic Usage
 
@@ -255,23 +255,23 @@ The main proposal document (`proposal.md`) follows WG21 format and includes:
 
 ### Compiler Verification
 
-✅ **GCC 15.2.0** - 51/51 tests passing, 0 warnings
-✅ **Clang 18.1.3** - 51/51 tests passing, 0 warnings
+**GCC 15.2.0** - 51/51 tests passing, 0 warnings
+**Clang 18.1.3** - 51/51 tests passing, 0 warnings
 
 Run `make bench` to see detailed benchmarks on your system.
 
-📊 **See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for complete benchmark analysis**
+**See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for complete benchmark analysis**
 
 ## Reference Implementation
 
 The reference implementation in `reference-impl/optional.hpp` is:
 
-- ✅ **Feature complete** - All std::optional operations
-- ✅ **C++23 compatible** - Uses concepts, requires clauses, constexpr improvements
-- ✅ **Constexpr enabled** - Works in constexpr contexts
-- ✅ **Exception safe** - Proper RAII and strong exception guarantee
-- ✅ **Extensively tested** - Comprehensive test suite
-- ✅ **Production quality** - Ready for real-world use
+- **Feature complete** - All std::optional operations
+- **C++23 compatible** - Uses concepts, requires clauses, constexpr improvements
+- **Constexpr enabled** - Works in constexpr contexts
+- **Exception safe** - Proper RAII and strong exception guarantee
+- **Extensively tested** - Comprehensive test suite
+- **Production quality** - Ready for real-world use
 
 ## Documentation
 

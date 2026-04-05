@@ -3,6 +3,7 @@
 #include <cassert>
 #include <string>
 #include <vector>
+#include <optional>
 
 using namespace std_proposal;
 
@@ -32,227 +33,69 @@ using namespace std_proposal;
 } while(0)
 
 // ============================================================================
-// Bool-based optional tests (backwards compatibility)
-// ============================================================================
-
-TEST(bool_based_default_construction) {
-    optional<int> opt;
-    ASSERT(!opt.has_value());
-    ASSERT(!opt);
-}
-
-TEST(bool_based_nullopt_construction) {
-    optional<int> opt(nullopt);
-    ASSERT(!opt.has_value());
-}
-
-TEST(bool_based_value_construction) {
-    optional<int> opt(42);
-    ASSERT(opt.has_value());
-    ASSERT(*opt == 42);
-}
-
-TEST(bool_based_copy_construction) {
-    optional<int> opt1(42);
-    optional<int> opt2(opt1);
-    ASSERT(opt2.has_value());
-    ASSERT(*opt2 == 42);
-}
-
-TEST(bool_based_move_construction) {
-    optional<std::string> opt1("hello");
-    optional<std::string> opt2(std::move(opt1));
-    ASSERT(opt2.has_value());
-    ASSERT(*opt2 == "hello");
-}
-
-TEST(bool_based_in_place_construction) {
-    optional<std::string> opt(in_place, 5, 'a');
-    ASSERT(opt.has_value());
-    ASSERT(*opt == "aaaaa");
-}
-
-TEST(bool_based_assignment) {
-    optional<int> opt;
-    opt = 42;
-    ASSERT(opt.has_value());
-    ASSERT(*opt == 42);
-
-    opt = nullopt;
-    ASSERT(!opt.has_value());
-}
-
-TEST(bool_based_copy_assignment) {
-    optional<int> opt1(42);
-    optional<int> opt2;
-    opt2 = opt1;
-    ASSERT(opt2.has_value());
-    ASSERT(*opt2 == 42);
-}
-
-TEST(bool_based_move_assignment) {
-    optional<std::string> opt1("hello");
-    optional<std::string> opt2;
-    opt2 = std::move(opt1);
-    ASSERT(opt2.has_value());
-    ASSERT(*opt2 == "hello");
-}
-
-TEST(bool_based_value) {
-    optional<int> opt(42);
-    ASSERT(opt.value() == 42);
-
-    optional<int> empty;
-    ASSERT_THROWS(empty.value(), bad_optional_access);
-}
-
-TEST(bool_based_value_or) {
-    optional<int> opt(42);
-    ASSERT(opt.value_or(99) == 42);
-
-    optional<int> empty;
-    ASSERT(empty.value_or(99) == 99);
-}
-
-TEST(bool_based_reset) {
-    optional<int> opt(42);
-    ASSERT(opt.has_value());
-    opt.reset();
-    ASSERT(!opt.has_value());
-}
-
-TEST(bool_based_emplace) {
-    optional<std::string> opt;
-    opt.emplace(5, 'b');
-    ASSERT(opt.has_value());
-    ASSERT(*opt == "bbbbb");
-
-    opt.emplace(3, 'x');
-    ASSERT(*opt == "xxx");
-}
-
-TEST(bool_based_swap) {
-    optional<int> opt1(42);
-    optional<int> opt2(99);
-
-    opt1.swap(opt2);
-    ASSERT(*opt1 == 99);
-    ASSERT(*opt2 == 42);
-
-    optional<int> opt3;
-    opt1.swap(opt3);
-    ASSERT(!opt1.has_value());
-    ASSERT(opt3.has_value());
-    ASSERT(*opt3 == 99);
-}
-
-TEST(bool_based_comparison) {
-    optional<int> opt1(42);
-    optional<int> opt2(42);
-    optional<int> opt3(99);
-    optional<int> empty;
-
-    ASSERT(opt1 == opt2);
-    ASSERT(opt1 != opt3);
-    ASSERT(opt1 != empty);
-    ASSERT(empty == nullopt);
-    ASSERT(opt1 == 42);
-    ASSERT(opt1 != 99);
-}
-
-TEST(bool_based_monadic_transform) {
-    optional<int> opt(42);
-    auto result = opt.transform([](int x) { return x * 2; });
-    ASSERT(result.has_value());
-    ASSERT(*result == 84);
-
-    optional<int> empty;
-    auto result2 = empty.transform([](int x) { return x * 2; });
-    ASSERT(!result2.has_value());
-}
-
-TEST(bool_based_monadic_and_then) {
-    optional<int> opt(42);
-    auto result = opt.and_then([](int x) -> optional<int> {
-        if (x > 0) return x * 2;
-        return nullopt;
-    });
-    ASSERT(result.has_value());
-    ASSERT(*result == 84);
-
-    auto result2 = opt.and_then([](int) -> optional<int> {
-        return nullopt;
-    });
-    ASSERT(!result2.has_value());
-}
-
-TEST(bool_based_monadic_or_else) {
-    optional<int> empty;
-    auto result = empty.or_else([]() -> optional<int> {
-        return 99;
-    });
-    ASSERT(result.has_value());
-    ASSERT(*result == 99);
-
-    optional<int> opt(42);
-    auto result2 = opt.or_else([]() -> optional<int> {
-        return 99;
-    });
-    ASSERT(*result2 == 42);
-}
-
-// ============================================================================
-// Sentinel-based optional tests
+// slim_optional basic tests
 // ============================================================================
 
 TEST(sentinel_default_construction) {
-    optional<int*, nullptr> opt;
+    slim_optional<int*, nullptr> opt;
     ASSERT(!opt.has_value());
     ASSERT(!opt);
 }
 
 TEST(sentinel_nullopt_construction) {
-    optional<int*, nullptr> opt(nullopt);
+    slim_optional<int*, nullptr> opt(nullopt);
+    ASSERT(!opt.has_value());
+}
+
+TEST(sentinel_std_nullopt_construction) {
+    slim_optional<int*, nullptr> opt(std::nullopt);
     ASSERT(!opt.has_value());
 }
 
 TEST(sentinel_value_construction) {
     int x = 42;
-    optional<int*, nullptr> opt(&x);
+    slim_optional<int*, nullptr> opt(&x);
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
 }
 
 TEST(sentinel_rejects_sentinel_value) {
-    ASSERT_THROWS((optional<int*, nullptr>(nullptr)), bad_optional_access);
+    ASSERT_THROWS((slim_optional<int*, nullptr>(nullptr)), bad_optional_access);
 }
 
 TEST(sentinel_copy_construction) {
     int x = 42;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2(opt1);
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2(opt1);
     ASSERT(opt2.has_value());
     ASSERT(*opt1 == *opt2);
 }
 
 TEST(sentinel_move_construction) {
     int x = 42;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2(std::move(opt1));
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2(std::move(opt1));
     ASSERT(opt2.has_value());
     ASSERT(**opt2 == 42);
 }
 
 TEST(sentinel_in_place_construction) {
     int x = 42;
-    optional<int*, nullptr> opt(in_place, &x);
+    slim_optional<int*, nullptr> opt(in_place, &x);
+    ASSERT(opt.has_value());
+    ASSERT(**opt == 42);
+}
+
+TEST(sentinel_std_in_place_construction) {
+    int x = 42;
+    slim_optional<int*, nullptr> opt(std::in_place, &x);
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
 }
 
 TEST(sentinel_assignment) {
     int x = 42;
-    optional<int*, nullptr> opt;
+    slim_optional<int*, nullptr> opt;
     opt = &x;
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
@@ -261,15 +104,22 @@ TEST(sentinel_assignment) {
     ASSERT(!opt.has_value());
 }
 
+TEST(sentinel_std_nullopt_assignment) {
+    int x = 42;
+    slim_optional<int*, nullptr> opt(&x);
+    opt = std::nullopt;
+    ASSERT(!opt.has_value());
+}
+
 TEST(sentinel_assignment_rejects_sentinel) {
-    optional<int*, nullptr> opt;
+    slim_optional<int*, nullptr> opt;
     ASSERT_THROWS(opt = nullptr, bad_optional_access);
 }
 
 TEST(sentinel_copy_assignment) {
     int x = 42;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2;
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2;
     opt2 = opt1;
     ASSERT(opt2.has_value());
     ASSERT(*opt1 == *opt2);
@@ -277,8 +127,8 @@ TEST(sentinel_copy_assignment) {
 
 TEST(sentinel_move_assignment) {
     int x = 42;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2;
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2;
     opt2 = std::move(opt1);
     ASSERT(opt2.has_value());
     ASSERT(**opt2 == 42);
@@ -286,26 +136,26 @@ TEST(sentinel_move_assignment) {
 
 TEST(sentinel_value) {
     int x = 42;
-    optional<int*, nullptr> opt(&x);
+    slim_optional<int*, nullptr> opt(&x);
     ASSERT(opt.value() == &x);
 
-    optional<int*, nullptr> empty;
+    slim_optional<int*, nullptr> empty;
     ASSERT_THROWS(empty.value(), bad_optional_access);
 }
 
 TEST(sentinel_value_or) {
     int x = 42;
     int y = 99;
-    optional<int*, nullptr> opt(&x);
+    slim_optional<int*, nullptr> opt(&x);
     ASSERT(opt.value_or(&y) == &x);
 
-    optional<int*, nullptr> empty;
+    slim_optional<int*, nullptr> empty;
     ASSERT(empty.value_or(&y) == &y);
 }
 
 TEST(sentinel_reset) {
     int x = 42;
-    optional<int*, nullptr> opt(&x);
+    slim_optional<int*, nullptr> opt(&x);
     ASSERT(opt.has_value());
     opt.reset();
     ASSERT(!opt.has_value());
@@ -313,28 +163,28 @@ TEST(sentinel_reset) {
 
 TEST(sentinel_emplace) {
     int x = 42;
-    optional<int*, nullptr> opt;
+    slim_optional<int*, nullptr> opt;
     opt.emplace(&x);
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
 }
 
 TEST(sentinel_emplace_rejects_sentinel) {
-    optional<int*, nullptr> opt;
+    slim_optional<int*, nullptr> opt;
     ASSERT_THROWS(opt.emplace(nullptr), bad_optional_access);
 }
 
 TEST(sentinel_swap) {
     int x = 42;
     int y = 99;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2(&y);
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2(&y);
 
     opt1.swap(opt2);
     ASSERT(**opt1 == 99);
     ASSERT(**opt2 == 42);
 
-    optional<int*, nullptr> opt3;
+    slim_optional<int*, nullptr> opt3;
     opt1.swap(opt3);
     ASSERT(!opt1.has_value());
     ASSERT(opt3.has_value());
@@ -344,51 +194,36 @@ TEST(sentinel_swap) {
 TEST(sentinel_comparison) {
     int x = 42;
     int y = 99;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2(&x);
-    optional<int*, nullptr> opt3(&y);
-    optional<int*, nullptr> empty;
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2(&x);
+    slim_optional<int*, nullptr> opt3(&y);
+    slim_optional<int*, nullptr> empty;
 
     ASSERT(opt1 == opt2);
     ASSERT(opt1 != opt3);
     ASSERT(opt1 != empty);
     ASSERT(empty == nullopt);
+    ASSERT(empty == std::nullopt);
     ASSERT(opt1 == &x);
     ASSERT(opt1 != &y);
 }
 
-TEST(sentinel_heterogeneous_comparison) {
-    int x = 42;
-
-    // Compare bool-based and sentinel-based
-    optional<int*> bool_opt(&x);
-    optional<int*, nullptr> sentinel_opt(&x);
-
-    ASSERT(bool_opt == sentinel_opt);
-
-    bool_opt.reset();
-    ASSERT(bool_opt != sentinel_opt);
-
-    sentinel_opt.reset();
-    ASSERT(bool_opt == sentinel_opt);  // Both empty
-}
-
 TEST(sentinel_monadic_transform) {
     int x = 42;
-    optional<int*, nullptr> opt(&x);
+    slim_optional<int*, nullptr> opt(&x);
     auto result = opt.transform([](int* p) { return *p * 2; });
     ASSERT(result.has_value());
     ASSERT(*result == 84);
 
-    optional<int*, nullptr> empty;
+    slim_optional<int*, nullptr> empty;
     auto result2 = empty.transform([](int* p) { return *p * 2; });
     ASSERT(!result2.has_value());
 }
 
 TEST(sentinel_monadic_and_then) {
     int x = 42;
-    optional<int*, nullptr> opt(&x);
-    auto result = opt.and_then([](int* p) -> optional<int> {
+    slim_optional<int*, nullptr> opt(&x);
+    auto result = opt.and_then([](int* p) -> slim_optional<int, -1> {
         if (*p > 0) return *p * 2;
         return nullopt;
     });
@@ -397,13 +232,69 @@ TEST(sentinel_monadic_and_then) {
 }
 
 TEST(sentinel_monadic_or_else) {
-    optional<int*, nullptr> empty;
+    slim_optional<int*, nullptr> empty;
     int y = 99;
-    auto result = empty.or_else([&y]() -> optional<int*, nullptr> {
+    auto result = empty.or_else([&y]() -> slim_optional<int*, nullptr> {
         return &y;
     });
     ASSERT(result.has_value());
     ASSERT(**result == 99);
+}
+
+// ============================================================================
+// Interop with std::optional tests
+// ============================================================================
+
+TEST(interop_construct_from_std_optional) {
+    int x = 42;
+    std::optional<int*> std_opt(&x);
+    slim_optional<int*, nullptr> slim(std_opt);
+    ASSERT(slim.has_value());
+    ASSERT(**slim == 42);
+
+    std::optional<int*> empty_std;
+    slim_optional<int*, nullptr> slim2(empty_std);
+    ASSERT(!slim2.has_value());
+}
+
+TEST(interop_assign_from_std_optional) {
+    int x = 42;
+    std::optional<int*> std_opt(&x);
+    slim_optional<int*, nullptr> slim;
+    slim = std_opt;
+    ASSERT(slim.has_value());
+    ASSERT(**slim == 42);
+
+    std::optional<int*> empty_std;
+    slim = empty_std;
+    ASSERT(!slim.has_value());
+}
+
+TEST(interop_convert_to_std_optional) {
+    int x = 42;
+    slim_optional<int*, nullptr> slim(&x);
+    std::optional<int*> std_opt = slim;
+    ASSERT(std_opt.has_value());
+    ASSERT(**std_opt == 42);
+
+    slim_optional<int*, nullptr> empty;
+    std::optional<int*> empty_std = empty;
+    ASSERT(!empty_std.has_value());
+}
+
+TEST(interop_compare_with_std_optional) {
+    int x = 42;
+    slim_optional<int*, nullptr> slim(&x);
+    std::optional<int*> std_opt(&x);
+
+    ASSERT(slim == std_opt);
+    ASSERT(std_opt == slim);
+
+    slim.reset();
+    ASSERT(slim != std_opt);
+
+    std_opt.reset();
+    ASSERT(slim == std_opt);  // Both empty
 }
 
 // ============================================================================
@@ -418,7 +309,7 @@ enum class Status : int32_t {
 };
 
 TEST(enum_sentinel_basic) {
-    optional<Status, Status::INVALID> opt;
+    slim_optional<Status, Status::INVALID> opt;
     ASSERT(!opt.has_value());
 
     opt = Status::OK;
@@ -430,16 +321,16 @@ TEST(enum_sentinel_basic) {
 }
 
 TEST(enum_sentinel_rejects_sentinel) {
-    ASSERT_THROWS((optional<Status, Status::INVALID>(Status::INVALID)),
+    ASSERT_THROWS((slim_optional<Status, Status::INVALID>(Status::INVALID)),
                   bad_optional_access);
 }
 
 TEST(enum_sentinel_sizeof) {
-    // Sentinel-based should be same size as enum
-    ASSERT(sizeof(optional<Status, Status::INVALID>) == sizeof(Status));
+    // slim_optional should be same size as enum
+    ASSERT(sizeof(slim_optional<Status, Status::INVALID>) == sizeof(Status));
 
-    // Bool-based is larger
-    ASSERT(sizeof(optional<Status>) > sizeof(Status));
+    // std::optional is larger
+    ASSERT(sizeof(std::optional<Status>) > sizeof(Status));
 }
 
 // ============================================================================
@@ -447,7 +338,7 @@ TEST(enum_sentinel_sizeof) {
 // ============================================================================
 
 TEST(integer_sentinel_basic) {
-    optional<int32_t, -1> opt;
+    slim_optional<int32_t, -1> opt;
     ASSERT(!opt.has_value());
 
     opt = 42;
@@ -459,15 +350,15 @@ TEST(integer_sentinel_basic) {
 }
 
 TEST(integer_sentinel_rejects_sentinel) {
-    ASSERT_THROWS((optional<int32_t, -1>(-1)), bad_optional_access);
+    ASSERT_THROWS((slim_optional<int32_t, -1>(-1)), bad_optional_access);
 
-    optional<int32_t, -1> opt;
+    slim_optional<int32_t, -1> opt;
     ASSERT_THROWS(opt = -1, bad_optional_access);
 }
 
 TEST(integer_sentinel_sizeof) {
-    ASSERT(sizeof(optional<int32_t, -1>) == sizeof(int32_t));
-    ASSERT(sizeof(optional<int32_t>) > sizeof(int32_t));
+    ASSERT(sizeof(slim_optional<int32_t, -1>) == sizeof(int32_t));
+    ASSERT(sizeof(std::optional<int32_t>) > sizeof(int32_t));
 }
 
 // ============================================================================
@@ -475,7 +366,7 @@ TEST(integer_sentinel_sizeof) {
 // ============================================================================
 
 constexpr bool constexpr_sentinel_test() {
-    optional<int, -1> opt;
+    slim_optional<int, -1> opt;
     if (opt.has_value()) return false;
 
     opt = 42;
@@ -493,46 +384,27 @@ TEST(constexpr_sentinel) {
     ASSERT(constexpr_sentinel_test());
 }
 
-constexpr bool constexpr_bool_based_test() {
-    optional<int> opt;
-    if (opt.has_value()) return false;
-
-    opt = 42;
-    if (!opt.has_value()) return false;
-    if (*opt != 42) return false;
-
-    opt.reset();
-    if (opt.has_value()) return false;
-
-    return true;
-}
-
-TEST(constexpr_bool_based) {
-    static_assert(constexpr_bool_based_test());
-    ASSERT(constexpr_bool_based_test());
-}
-
 // ============================================================================
 // Size tests
 // ============================================================================
 
 TEST(sizeof_comparisons) {
     // Pointers
-    ASSERT(sizeof(optional<int*, nullptr>) == sizeof(int*));
-    ASSERT(sizeof(optional<int*>) > sizeof(int*));
+    ASSERT(sizeof(slim_optional<int*, nullptr>) == sizeof(int*));
+    ASSERT(sizeof(std::optional<int*>) > sizeof(int*));
 
     // 32-bit integers
-    ASSERT(sizeof(optional<int32_t, -1>) == sizeof(int32_t));
-    ASSERT(sizeof(optional<int32_t>) > sizeof(int32_t));
+    ASSERT(sizeof(slim_optional<int32_t, -1>) == sizeof(int32_t));
+    ASSERT(sizeof(std::optional<int32_t>) > sizeof(int32_t));
 
     // 64-bit integers
-    ASSERT(sizeof(optional<int64_t, -1L>) == sizeof(int64_t));
-    ASSERT(sizeof(optional<int64_t>) > sizeof(int64_t));
+    ASSERT(sizeof(slim_optional<int64_t, -1L>) == sizeof(int64_t));
+    ASSERT(sizeof(std::optional<int64_t>) > sizeof(int64_t));
 
-    std::cout << "  sizeof(optional<int*>): " << sizeof(optional<int*>) << "\n";
-    std::cout << "  sizeof(optional<int*, nullptr>): " << sizeof(optional<int*, nullptr>) << "\n";
-    std::cout << "  sizeof(optional<int32_t>): " << sizeof(optional<int32_t>) << "\n";
-    std::cout << "  sizeof(optional<int32_t, -1>): " << sizeof(optional<int32_t, -1>) << "\n";
+    std::cout << "  sizeof(std::optional<int*>): " << sizeof(std::optional<int*>) << "\n";
+    std::cout << "  sizeof(slim_optional<int*, nullptr>): " << sizeof(slim_optional<int*, nullptr>) << "\n";
+    std::cout << "  sizeof(std::optional<int32_t>): " << sizeof(std::optional<int32_t>) << "\n";
+    std::cout << "  sizeof(slim_optional<int32_t, -1>): " << sizeof(slim_optional<int32_t, -1>) << "\n";
 }
 
 // ============================================================================
@@ -551,7 +423,7 @@ struct Point {
 constexpr Point INVALID_POINT{-9999, -9999};
 
 TEST(custom_type_sentinel) {
-    optional<Point, INVALID_POINT> opt;
+    slim_optional<Point, INVALID_POINT> opt;
     ASSERT(!opt.has_value());
 
     opt = Point{10, 20};
@@ -568,7 +440,7 @@ TEST(custom_type_sentinel) {
 }
 
 TEST(custom_type_rejects_sentinel) {
-    ASSERT_THROWS((optional<Point, INVALID_POINT>(INVALID_POINT)),
+    ASSERT_THROWS((slim_optional<Point, INVALID_POINT>(INVALID_POINT)),
                   bad_optional_access);
 }
 
@@ -578,44 +450,38 @@ TEST(custom_type_rejects_sentinel) {
 
 TEST(hash_support) {
     int x = 42;
-    optional<int*, nullptr> opt1(&x);
-    optional<int*, nullptr> opt2(&x);
-    optional<int*, nullptr> empty;
+    slim_optional<int*, nullptr> opt1(&x);
+    slim_optional<int*, nullptr> opt2(&x);
+    slim_optional<int*, nullptr> empty;
 
-    std::hash<optional<int*, nullptr>> hasher;
+    std::hash<slim_optional<int*, nullptr>> hasher;
 
     ASSERT(hasher(opt1) == hasher(opt2));
     ASSERT(hasher(empty) == 0);
 
-    // Hash of optional should match hash of value
+    // Hash of slim_optional should match hash of value
     ASSERT(hasher(opt1) == std::hash<int*>{}(&x));
 }
 
 // ============================================================================
-// make_optional tests
+// make_slim_optional tests
 // ============================================================================
 
-TEST(make_optional_sentinel) {
+TEST(make_slim_optional_test) {
     int x = 42;
-    auto opt = make_optional<int*, nullptr>(&x);
+    auto opt = make_slim_optional<int*, nullptr>(&x);
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
-}
-
-TEST(make_optional_bool_based) {
-    auto opt = make_optional<int>(42);
-    ASSERT(opt.has_value());
-    ASSERT(*opt == 42);
 }
 
 // ============================================================================
 // Container tests
 // ============================================================================
 
-TEST(vector_of_optionals) {
+TEST(vector_of_slim_optionals) {
     int x = 1, y = 2, z = 3;
 
-    std::vector<optional<int*, nullptr>> vec;
+    std::vector<slim_optional<int*, nullptr>> vec;
     vec.push_back(&x);
     vec.push_back(nullopt);
     vec.push_back(&y);
@@ -633,39 +499,21 @@ TEST(vector_of_optionals) {
 // ============================================================================
 
 int main() {
-    std::cout << "Running Sentinel-Based Optional Tests\n";
+    std::cout << "Running slim_optional Tests\n";
     std::cout << "======================================\n\n";
 
-    // Bool-based tests
-    std::cout << "Bool-based optional tests:\n";
-    RUN_TEST(bool_based_default_construction);
-    RUN_TEST(bool_based_nullopt_construction);
-    RUN_TEST(bool_based_value_construction);
-    RUN_TEST(bool_based_copy_construction);
-    RUN_TEST(bool_based_move_construction);
-    RUN_TEST(bool_based_in_place_construction);
-    RUN_TEST(bool_based_assignment);
-    RUN_TEST(bool_based_copy_assignment);
-    RUN_TEST(bool_based_move_assignment);
-    RUN_TEST(bool_based_value);
-    RUN_TEST(bool_based_value_or);
-    RUN_TEST(bool_based_reset);
-    RUN_TEST(bool_based_emplace);
-    RUN_TEST(bool_based_swap);
-    RUN_TEST(bool_based_comparison);
-    RUN_TEST(bool_based_monadic_transform);
-    RUN_TEST(bool_based_monadic_and_then);
-    RUN_TEST(bool_based_monadic_or_else);
-
-    std::cout << "\nSentinel-based optional tests:\n";
+    std::cout << "slim_optional basic tests:\n";
     RUN_TEST(sentinel_default_construction);
     RUN_TEST(sentinel_nullopt_construction);
+    RUN_TEST(sentinel_std_nullopt_construction);
     RUN_TEST(sentinel_value_construction);
     RUN_TEST(sentinel_rejects_sentinel_value);
     RUN_TEST(sentinel_copy_construction);
     RUN_TEST(sentinel_move_construction);
     RUN_TEST(sentinel_in_place_construction);
+    RUN_TEST(sentinel_std_in_place_construction);
     RUN_TEST(sentinel_assignment);
+    RUN_TEST(sentinel_std_nullopt_assignment);
     RUN_TEST(sentinel_assignment_rejects_sentinel);
     RUN_TEST(sentinel_copy_assignment);
     RUN_TEST(sentinel_move_assignment);
@@ -676,10 +524,15 @@ int main() {
     RUN_TEST(sentinel_emplace_rejects_sentinel);
     RUN_TEST(sentinel_swap);
     RUN_TEST(sentinel_comparison);
-    RUN_TEST(sentinel_heterogeneous_comparison);
     RUN_TEST(sentinel_monadic_transform);
     RUN_TEST(sentinel_monadic_and_then);
     RUN_TEST(sentinel_monadic_or_else);
+
+    std::cout << "\nInterop with std::optional tests:\n";
+    RUN_TEST(interop_construct_from_std_optional);
+    RUN_TEST(interop_assign_from_std_optional);
+    RUN_TEST(interop_convert_to_std_optional);
+    RUN_TEST(interop_compare_with_std_optional);
 
     std::cout << "\nEnum sentinel tests:\n";
     RUN_TEST(enum_sentinel_basic);
@@ -693,7 +546,6 @@ int main() {
 
     std::cout << "\nConstexpr tests:\n";
     RUN_TEST(constexpr_sentinel);
-    RUN_TEST(constexpr_bool_based);
 
     std::cout << "\nSize tests:\n";
     RUN_TEST(sizeof_comparisons);
@@ -705,12 +557,11 @@ int main() {
     std::cout << "\nHash tests:\n";
     RUN_TEST(hash_support);
 
-    std::cout << "\nmake_optional tests:\n";
-    RUN_TEST(make_optional_sentinel);
-    RUN_TEST(make_optional_bool_based);
+    std::cout << "\nmake_slim_optional tests:\n";
+    RUN_TEST(make_slim_optional_test);
 
     std::cout << "\nContainer tests:\n";
-    RUN_TEST(vector_of_optionals);
+    RUN_TEST(vector_of_slim_optionals);
 
     std::cout << "\n======================================\n";
     std::cout << "All tests passed successfully!\n";
