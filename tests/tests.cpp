@@ -706,6 +706,33 @@ TEST(long_double_rejects_nan) {
     ASSERT_THROWS((optional<long double>(std::numeric_limits<long double>::quiet_NaN())), bad_optional_access);
 }
 
+TEST(float_spaceship) {
+    optional<float> a(1.0f);
+    optional<float> b(2.0f);
+    optional<float> empty;
+
+    ASSERT((a <=> b) == std::partial_ordering::less);
+    ASSERT((b <=> a) == std::partial_ordering::greater);
+    ASSERT((a <=> a) == std::partial_ordering::equivalent);
+    ASSERT((empty <=> a) == std::partial_ordering::less);
+    ASSERT((a <=> empty) == std::partial_ordering::greater);
+    ASSERT((empty <=> empty) == std::partial_ordering::equivalent);
+
+    // Compare with value
+    ASSERT((a <=> 2.0f) == std::partial_ordering::less);
+    ASSERT((empty <=> 1.0f) == std::partial_ordering::less);
+}
+
+TEST(double_spaceship) {
+    optional<double> a(1.0);
+    optional<double> b(2.0);
+    optional<double> empty;
+
+    ASSERT((a <=> b) == std::partial_ordering::less);
+    ASSERT((empty <=> a) == std::partial_ordering::less);
+    ASSERT((a <=> 2.0) == std::partial_ordering::less);
+}
+
 // ============================================================================
 // char16/32 tests
 // ============================================================================
@@ -823,35 +850,6 @@ TEST(move_only_function_type) {
     ASSERT((*opt)() == 99);
 
     opt.reset();
-    ASSERT(!opt.has_value());
-}
-
-TEST(weak_ptr_type) {
-    optional<std::weak_ptr<int>> opt;
-    ASSERT(!opt.has_value());
-
-    auto sp = std::make_shared<int>(42);
-    opt = std::weak_ptr<int>{sp};
-    ASSERT(opt.has_value());
-    ASSERT(*opt->lock() == 42);
-
-    opt.reset();
-    ASSERT(!opt.has_value());
-}
-
-TEST(weak_ptr_expired_vs_empty) {
-    // A weak_ptr whose shared_ptr has died is expired but was assigned —
-    // the sentinel is a default-constructed weak_ptr (use_count == 0 && expired),
-    // not merely an expired one. However, once the shared_ptr dies the weak_ptr
-    // becomes indistinguishable from default-constructed in terms of observable state.
-    // This is an inherent limitation: weak_ptr has no "never assigned" flag.
-    optional<std::weak_ptr<int>> opt;
-    {
-        auto sp = std::make_shared<int>(42);
-        opt = std::weak_ptr<int>{sp};
-        ASSERT(opt.has_value());
-    }
-    // sp is gone — weak_ptr is now expired, indistinguishable from sentinel
     ASSERT(!opt.has_value());
 }
 
@@ -1122,6 +1120,8 @@ int main() {
     RUN_TEST(double_rejects_nan);
     RUN_TEST(long_double_type);
     RUN_TEST(long_double_rejects_nan);
+    RUN_TEST(float_spaceship);
+    RUN_TEST(double_spaceship);
 
     std::cout << "\nchar16/32 types:\n";
     RUN_TEST(char16);
@@ -1134,8 +1134,6 @@ int main() {
     RUN_TEST(span_type);
     RUN_TEST(function_type);
     RUN_TEST(move_only_function_type);
-    RUN_TEST(weak_ptr_type);
-    RUN_TEST(weak_ptr_expired_vs_empty);
     RUN_TEST(coroutine_handle_type);
     RUN_TEST(any_type);
 

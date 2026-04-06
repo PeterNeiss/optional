@@ -2,6 +2,7 @@
 
 #include <any>
 #include <bit>
+#include <compare>
 #include <cmath>
 #include <concepts>
 #include <coroutine>
@@ -172,12 +173,6 @@ struct sentinel_traits<std::move_only_function<F>> {
     static bool is_sentinel(const std::move_only_function<F>& v) noexcept { return !v; }
 };
 
-template<class T>
-struct sentinel_traits<std::weak_ptr<T>> {
-    static std::weak_ptr<T> sentinel() noexcept { return std::weak_ptr<T>{}; }
-    static bool is_sentinel(const std::weak_ptr<T>& v) noexcept { return v.expired() && v.use_count() == 0; }
-};
-
 template<class P>
 struct sentinel_traits<std::coroutine_handle<P>> {
     static constexpr std::coroutine_handle<P> sentinel() noexcept { return std::coroutine_handle<P>{}; }
@@ -209,17 +204,17 @@ public:
     using value_type = T;
 
     // Constructors
-    constexpr optional() noexcept(std::is_nothrow_copy_constructible_v<T>)
+    constexpr optional() noexcept(noexcept(T(sentinel_traits<T>::sentinel())))
         : value_(sentinel_traits<T>::sentinel()) {}
 
-    constexpr optional(nullopt_t) noexcept(std::is_nothrow_copy_constructible_v<T>)
+    constexpr optional(nullopt_t) noexcept(noexcept(T(sentinel_traits<T>::sentinel())))
         : value_(sentinel_traits<T>::sentinel()) {}
 
-    constexpr optional(std::nullopt_t) noexcept(std::is_nothrow_copy_constructible_v<T>)
+    constexpr optional(std::nullopt_t) noexcept(noexcept(T(sentinel_traits<T>::sentinel())))
         : value_(sentinel_traits<T>::sentinel()) {}
 
     constexpr optional(const optional& other) = default;
-    constexpr optional(optional&& other) noexcept = default;
+    constexpr optional(optional&& other) noexcept(std::is_nothrow_move_constructible_v<T>) = default;
 
     template<class... Args>
         requires std::is_constructible_v<T, Args...>
@@ -301,18 +296,18 @@ public:
     constexpr ~optional() = default;
 
     // Assignment
-    constexpr optional& operator=(nullopt_t) noexcept(std::is_nothrow_copy_assignable_v<T>) {
+    constexpr optional& operator=(nullopt_t) noexcept(noexcept(std::declval<T&>() = sentinel_traits<T>::sentinel())) {
         value_ = sentinel_traits<T>::sentinel();
         return *this;
     }
 
-    constexpr optional& operator=(std::nullopt_t) noexcept(std::is_nothrow_copy_assignable_v<T>) {
+    constexpr optional& operator=(std::nullopt_t) noexcept(noexcept(std::declval<T&>() = sentinel_traits<T>::sentinel())) {
         value_ = sentinel_traits<T>::sentinel();
         return *this;
     }
 
     constexpr optional& operator=(const optional& other) = default;
-    constexpr optional& operator=(optional&& other) noexcept = default;
+    constexpr optional& operator=(optional&& other) noexcept(std::is_nothrow_move_assignable_v<T>) = default;
 
     template<class U = T>
         requires (!std::same_as<std::remove_cvref_t<U>, optional> &&
@@ -461,7 +456,7 @@ public:
     }
 
     // Modifiers
-    constexpr void reset() noexcept(std::is_nothrow_copy_assignable_v<T>) {
+    constexpr void reset() noexcept(noexcept(std::declval<T&>() = sentinel_traits<T>::sentinel())) {
         value_ = sentinel_traits<T>::sentinel();
     }
 
@@ -582,6 +577,13 @@ public:
     }
 };
 
+// Helper trait to exclude optional types from heterogeneous comparisons
+namespace detail {
+template<class> inline constexpr bool is_optional_v = false;
+template<class T> inline constexpr bool is_optional_v<optional<T>> = true;
+template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
+}
+
 // ============================================================================
 // Comparison operators — optional vs optional
 // ============================================================================
@@ -598,7 +600,7 @@ constexpr bool operator==(const optional<T>& lhs, const optional<T>& rhs) {
 }
 
 template<class T>
-constexpr auto operator<=>(const optional<T>& lhs, const optional<T>& rhs)
+constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T>& lhs, const optional<T>& rhs)
     requires std::three_way_comparable<T>
 {
     if (lhs.has_value() && rhs.has_value()) {
@@ -628,7 +630,7 @@ constexpr bool operator==(const std::optional<T>& lhs, const optional<T>& rhs) {
 }
 
 template<class T>
-constexpr auto operator<=>(const optional<T>& lhs, const std::optional<T>& rhs)
+constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T>& lhs, const std::optional<T>& rhs)
     requires std::three_way_comparable<T>
 {
     if (lhs.has_value() && rhs.has_value()) {
@@ -666,14 +668,19 @@ constexpr std::strong_ordering operator<=>(const optional<T>& opt, std::nullopt_
 // ============================================================================
 
 template<class T, class U>
+    requires (!detail::is_optional_v<std::remove_cvref_t<U>> &&
+              !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
+              !std::same_as<std::remove_cvref_t<U>, std::nullopt_t>)
 constexpr bool operator==(const optional<T>& opt, const U& value) {
     return opt.has_value() && (*opt == value);
 }
 
 template<class T, class U>
-constexpr auto operator<=>(const optional<T>& opt, const U& value)
-    requires std::three_way_comparable_with<T, U>
-{
+    requires (!detail::is_optional_v<std::remove_cvref_t<U>> &&
+              !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
+              !std::same_as<std::remove_cvref_t<U>, std::nullopt_t> &&
+              std::three_way_comparable_with<T, U>)
+constexpr std::compare_three_way_result_t<T, U> operator<=>(const optional<T>& opt, const U& value) {
     return opt.has_value() ? *opt <=> value : std::strong_ordering::less;
 }
 
