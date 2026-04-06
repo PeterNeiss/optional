@@ -844,4 +844,33 @@ struct hash<slim::optional<T>> {
     }
 };
 
+// numeric_limits for slim::optional — reflects the reduced valid range
+template<class T>
+    requires slim::has_sentinel_traits<T> && numeric_limits<T>::is_specialized
+struct numeric_limits<slim::optional<T>> : numeric_limits<T> {
+    static constexpr T min() noexcept {
+        if constexpr (std::signed_integral<T>)
+            return numeric_limits<T>::min() + 1;
+        else
+            return numeric_limits<T>::min();
+    }
+
+    static constexpr T lowest() noexcept {
+        if constexpr (std::signed_integral<T>)
+            return numeric_limits<T>::min() + 1;
+        else
+            return numeric_limits<T>::lowest();
+    }
+
+    static constexpr T max() noexcept {
+        if constexpr (std::unsigned_integral<T> || std::same_as<T, char16_t> || std::same_as<T, char32_t>)
+            return numeric_limits<T>::max() - 1;
+        else
+            return numeric_limits<T>::max();
+    }
+
+    static constexpr bool has_quiet_NaN = std::floating_point<T> ? false : numeric_limits<T>::has_quiet_NaN;
+    static constexpr bool has_signaling_NaN = std::floating_point<T> ? false : numeric_limits<T>::has_signaling_NaN;
+};
+
 } // namespace std

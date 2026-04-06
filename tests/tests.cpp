@@ -993,6 +993,61 @@ TEST(sizeof_all) {
 }
 
 // ============================================================================
+// numeric_limits tests
+// ============================================================================
+
+TEST(numeric_limits_signed) {
+    using lim = std::numeric_limits<optional<int>>;
+    using base = std::numeric_limits<int>;
+    static_assert(lim::is_specialized);
+    static_assert(lim::min() == base::min() + 1);
+    static_assert(lim::lowest() == base::min() + 1);
+    static_assert(lim::max() == base::max());
+
+    using lim64 = std::numeric_limits<optional<int64_t>>;
+    using base64 = std::numeric_limits<int64_t>;
+    static_assert(lim64::min() == base64::min() + 1);
+    static_assert(lim64::lowest() == base64::min() + 1);
+    static_assert(lim64::max() == base64::max());
+}
+
+TEST(numeric_limits_unsigned) {
+    using lim = std::numeric_limits<optional<unsigned>>;
+    using base = std::numeric_limits<unsigned>;
+    static_assert(lim::is_specialized);
+    static_assert(lim::min() == 0);
+    static_assert(lim::max() == base::max() - 1);
+
+    using lim64 = std::numeric_limits<optional<uint64_t>>;
+    using base64 = std::numeric_limits<uint64_t>;
+    static_assert(lim64::min() == 0);
+    static_assert(lim64::max() == base64::max() - 1);
+}
+
+TEST(numeric_limits_float) {
+    using lim = std::numeric_limits<optional<float>>;
+    using base = std::numeric_limits<float>;
+    static_assert(lim::is_specialized);
+    static_assert(lim::has_quiet_NaN == false);
+    static_assert(lim::has_signaling_NaN == false);
+    static_assert(lim::min() == base::min());
+    static_assert(lim::max() == base::max());
+    static_assert(lim::lowest() == base::lowest());
+
+    using limd = std::numeric_limits<optional<double>>;
+    static_assert(limd::has_quiet_NaN == false);
+    static_assert(limd::has_signaling_NaN == false);
+}
+
+TEST(numeric_limits_char16_32) {
+    using lim16 = std::numeric_limits<optional<char16_t>>;
+    static_assert(lim16::max() == static_cast<char16_t>(0xFFFE));
+
+    using lim32 = std::numeric_limits<optional<char32_t>>;
+    static_assert(lim32::max() == static_cast<char32_t>(0xFFFFFFFE));
+}
+
+// ============================================================================
 // Constexpr tests
 // ============================================================================
 
@@ -1234,6 +1289,12 @@ int main() {
 
     std::cout << "\nsizeof all types:\n";
     RUN_TEST(sizeof_all);
+
+    std::cout << "\nnumeric_limits:\n";
+    RUN_TEST(numeric_limits_signed);
+    RUN_TEST(numeric_limits_unsigned);
+    RUN_TEST(numeric_limits_float);
+    RUN_TEST(numeric_limits_char16_32);
 
     std::cout << "\nConstexpr all:\n";
     RUN_TEST(constexpr_all);
