@@ -131,6 +131,19 @@ std::numeric_limits<slim::optional<float>>::has_quiet_NaN    // false
 std::numeric_limits<slim::optional<float>>::has_signaling_NaN // false
 ```
 
+## Object lifetime
+
+Unlike `std::optional`, which uses a union and only constructs `T` when engaged, `slim::optional` always holds a live `T` object — either the real value or the sentinel. This gives it a simpler lifetime model:
+
+- **No placement-new or explicit destructor calls.** All state transitions use assignment. `reset()` assigns the sentinel; `emplace()` move-assigns; `operator=` assigns.
+- **No engaged/empty state matrix.** `std::optional::operator=` has four cases (engaged/empty x engaged/empty), each with different construct/destroy/assign behavior. `slim::optional` always assigns.
+
+This is safe for types with trivial constructors and destructors (integers, floats, pointers, `char16_t`/`char32_t`) — constructing an `int` with `INT_MIN` or destroying one is a no-op, so the always-alive model produces identical codegen to `std::optional`.
+
+For `unique_ptr` and `shared_ptr`, the sentinel is `nullptr` — the same state as a default-constructed smart pointer. Assigning `nullptr` releases the owned resource just as destruction would, so `reset()` and `operator=(nullopt)` correctly free memory. An empty `slim::optional<unique_ptr<T>>` simply holds a null `unique_ptr`, which is a zero-cost, well-defined state.
+
+For a detailed comparison of constructor/destructor semantics against `std::optional`, see [ANALYSIS.md](ANALYSIS.md).
+
 ## Sentinel safety
 
 Storing the sentinel value directly is a programming error and throws `slim::bad_optional_access`. Use `reset()` or `nullopt` to clear.
