@@ -1,16 +1,19 @@
 #include <slim/optional.hpp>
-#include <any>
-#include <coroutine>
 #include <iostream>
 #include <cassert>
 #include <cmath>
-#include <functional>
 #include <memory>
-#include <span>
 #include <string>
-#include <string_view>
 #include <vector>
 #include <optional>
+
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
+#include <any>
+#include <coroutine>
+#include <functional>
+#include <span>
+#include <string_view>
+#endif
 
 using namespace slim;
 
@@ -485,6 +488,64 @@ TEST(make_optional_test) {
 }
 
 // ============================================================================
+// CTAD tests
+// ============================================================================
+
+TEST(ctad_basic) {
+    int x = 42;
+    optional opt(&x);
+    ASSERT(opt.has_value());
+    ASSERT(**opt == 42);
+
+    optional opt2(42);
+    ASSERT(*opt2 == 42);
+
+    optional opt3(3.14f);
+    ASSERT(*opt3 == 3.14f);
+}
+
+// ============================================================================
+// and_then with std::optional return
+// ============================================================================
+
+TEST(and_then_returns_std_optional) {
+    int x = 42;
+    optional<int*> opt(&x);
+    auto result = opt.and_then([](int* p) -> std::optional<int> {
+        return *p * 2;
+    });
+    ASSERT(result.has_value());
+    ASSERT(*result == 84);
+
+    optional<int*> empty;
+    auto result2 = empty.and_then([](int* p) -> std::optional<int> {
+        return *p;
+    });
+    ASSERT(!result2.has_value());
+}
+
+// ============================================================================
+// emplace preserves old value on sentinel rejection
+// ============================================================================
+
+TEST(emplace_preserves_value_on_throw) {
+    optional<int> opt(42);
+    ASSERT(*opt == 42);
+
+    // Emplace with sentinel value should throw
+    bool threw = false;
+    try {
+        opt.emplace(std::numeric_limits<int>::min());
+    } catch (const bad_optional_access&) {
+        threw = true;
+    }
+    ASSERT(threw);
+    // Old value should be preserved
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 42);
+}
+
+// ============================================================================
 // Container tests
 // ============================================================================
 
@@ -627,6 +688,15 @@ TEST(pointer_rejects_nullptr) {
     ASSERT_THROWS((optional<int*>(nullptr)), bad_optional_access);
 }
 
+TEST(pointer_value_assign_sentinel) {
+    int x = 42;
+    optional<int*> opt(&x);
+    ASSERT(opt.has_value());
+
+    opt.value() = nullptr;
+    ASSERT(!opt.has_value());
+}
+
 TEST(const_pointer) {
     optional<const char*> opt;
     ASSERT(!opt.has_value());
@@ -680,10 +750,12 @@ TEST(double_type) {
 
 TEST(float_rejects_nan) {
     ASSERT_THROWS((optional<float>(std::numeric_limits<float>::quiet_NaN())), bad_optional_access);
+    ASSERT_THROWS((optional<float>(std::numeric_limits<float>::signaling_NaN())), bad_optional_access);
 }
 
 TEST(double_rejects_nan) {
     ASSERT_THROWS((optional<double>(std::numeric_limits<double>::quiet_NaN())), bad_optional_access);
+    ASSERT_THROWS((optional<double>(std::numeric_limits<double>::signaling_NaN())), bad_optional_access);
 }
 
 TEST(long_double_type) {
@@ -704,6 +776,7 @@ TEST(long_double_type) {
 
 TEST(long_double_rejects_nan) {
     ASSERT_THROWS((optional<long double>(std::numeric_limits<long double>::quiet_NaN())), bad_optional_access);
+    ASSERT_THROWS((optional<long double>(std::numeric_limits<long double>::signaling_NaN())), bad_optional_access);
 }
 
 TEST(float_spaceship) {
@@ -765,6 +838,8 @@ TEST(char32) {
 // ============================================================================
 // Standard library class type tests
 // ============================================================================
+
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
 
 TEST(unique_ptr_type) {
     optional<std::unique_ptr<int>> opt;
@@ -878,6 +953,8 @@ TEST(any_type) {
     ASSERT(!opt.has_value());
 }
 
+#endif // !SLIM_OPTIONAL_LEAN_AND_MEAN
+
 // ============================================================================
 // sizeof tests
 // ============================================================================
@@ -890,14 +967,11 @@ TEST(sizeof_all) {
     ASSERT(sizeof(optional<float>) == sizeof(float));
     ASSERT(sizeof(optional<double>) == sizeof(double));
     ASSERT(sizeof(optional<int*>) == sizeof(int*));
-    ASSERT(sizeof(optional<std::string_view>) == sizeof(std::string_view));
-    ASSERT(sizeof(optional<std::unique_ptr<int>>) == sizeof(std::unique_ptr<int>));
 
     // All should be smaller than std::optional
     ASSERT(sizeof(optional<int>) < sizeof(std::optional<int>));
     ASSERT(sizeof(optional<double>) < sizeof(std::optional<double>));
     ASSERT(sizeof(optional<int*>) < sizeof(std::optional<int*>));
-    ASSERT(sizeof(optional<std::string_view>) < sizeof(std::optional<std::string_view>));
 
     std::cout << "  sizeof(optional<int>): " << sizeof(optional<int>) << "\n";
     std::cout << "  sizeof(std::optional<int>): " << sizeof(std::optional<int>) << "\n";
@@ -905,10 +979,17 @@ TEST(sizeof_all) {
     std::cout << "  sizeof(std::optional<double>): " << sizeof(std::optional<double>) << "\n";
     std::cout << "  sizeof(optional<int*>): " << sizeof(optional<int*>) << "\n";
     std::cout << "  sizeof(std::optional<int*>): " << sizeof(std::optional<int*>) << "\n";
+
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
+    ASSERT(sizeof(optional<std::string_view>) == sizeof(std::string_view));
+    ASSERT(sizeof(optional<std::unique_ptr<int>>) == sizeof(std::unique_ptr<int>));
+    ASSERT(sizeof(optional<std::string_view>) < sizeof(std::optional<std::string_view>));
+
     std::cout << "  sizeof(optional<string_view>): " << sizeof(optional<std::string_view>) << "\n";
     std::cout << "  sizeof(std::optional<string_view>): " << sizeof(std::optional<std::string_view>) << "\n";
     std::cout << "  sizeof(optional<unique_ptr<int>>): " << sizeof(optional<std::unique_ptr<int>>) << "\n";
     std::cout << "  sizeof(std::optional<unique_ptr<int>>): " << sizeof(std::optional<std::unique_ptr<int>>) << "\n";
+#endif
 }
 
 // ============================================================================
@@ -986,7 +1067,9 @@ TEST(sentinel_traits_concept_check) {
     static_assert(slim::has_sentinel_traits<float>);
     static_assert(slim::has_sentinel_traits<double>);
     static_assert(slim::has_sentinel_traits<int*>);
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
     static_assert(slim::has_sentinel_traits<std::string_view>);
+#endif
     static_assert(slim::has_sentinel_traits<Color>);
     static_assert(slim::has_sentinel_traits<Status>);
     static_assert(slim::has_sentinel_traits<Point>);
@@ -1094,6 +1177,15 @@ int main() {
     std::cout << "\nmake_optional:\n";
     RUN_TEST(make_optional_test);
 
+    std::cout << "\nCTAD:\n";
+    RUN_TEST(ctad_basic);
+
+    std::cout << "\nand_then interop:\n";
+    RUN_TEST(and_then_returns_std_optional);
+
+    std::cout << "\nemplace exception safety:\n";
+    RUN_TEST(emplace_preserves_value_on_throw);
+
     std::cout << "\nContainers:\n";
     RUN_TEST(vector_of_optionals);
 
@@ -1111,6 +1203,7 @@ int main() {
     std::cout << "\nPointer types:\n";
     RUN_TEST(pointer);
     RUN_TEST(pointer_rejects_nullptr);
+    RUN_TEST(pointer_value_assign_sentinel);
     RUN_TEST(const_pointer);
 
     std::cout << "\nFloating point types:\n";
@@ -1127,6 +1220,7 @@ int main() {
     RUN_TEST(char16);
     RUN_TEST(char32);
 
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
     std::cout << "\nStandard library types:\n";
     RUN_TEST(unique_ptr_type);
     RUN_TEST(shared_ptr_type);
@@ -1136,6 +1230,7 @@ int main() {
     RUN_TEST(move_only_function_type);
     RUN_TEST(coroutine_handle_type);
     RUN_TEST(any_type);
+#endif
 
     std::cout << "\nsizeof all types:\n";
     RUN_TEST(sizeof_all);

@@ -1,78 +1,72 @@
 # slim::optional
 
-A sentinel-based `optional` for C++23. Same API as `std::optional`, half the memory.
+A header-only C++23 library. Drop-in `optional` that uses sentinel values instead of a `bool` flag — same API as `std::optional`, half the memory.
 
-```cpp
-#include <slim/optional.hpp>
+`slim::optional` only works with types that have a sentinel value defined via `sentinel_traits`. For types without a natural sentinel (e.g., `bool`, `char`, aggregates), use `std::optional`.
 
-slim::optional<int*> ptr;          // 8 bytes  (std::optional<int*> = 16)
-slim::optional<int>  val;          // 4 bytes  (std::optional<int>  = 8)
-slim::optional<double> d;          // 8 bytes  (std::optional<double> = 16)
+```
+std::optional<int*>     16 bytes     slim::optional<int*>     8 bytes
+std::optional<int>       8 bytes     slim::optional<int>      4 bytes
+std::optional<double>   16 bytes     slim::optional<double>   8 bytes
 ```
 
-Instead of storing a `bool` flag alongside the value, `slim::optional<T>` reserves one value from `T`'s domain as a sentinel (e.g. `nullptr` for pointers, `NaN` for floats, `numeric_limits::min()` for signed integers). The sentinel is chosen automatically via `sentinel_traits<T>`.
+## Getting started
 
-## Building
+**Copy the header** into your project:
 
-Requires a C++23 compiler (GCC 13+, Clang 17+).
-
-```bash
-cmake -B build
-cmake --build build
-ctest --test-dir build
+```
+cp include/slim/optional.hpp your_project/include/slim/
 ```
 
-## Usage
-
-### Drop-in header
-
-Copy `include/slim/optional.hpp` into your project and add the include path.
-
-### CMake subdirectory
+Or **add as a CMake subdirectory**:
 
 ```cmake
-add_subdirectory(slim-optional)
+add_subdirectory(slim-optional)       # path to this repo
 target_link_libraries(myapp PRIVATE slim_optional)
 ```
 
-Then:
+Either way:
 
 ```cpp
 #include <slim/optional.hpp>
 
-slim::optional<int*> ptr;       // nullptr sentinel, automatic
-slim::optional<int> val;        // INT_MIN sentinel, automatic
-slim::optional<float> f;        // NaN sentinel, automatic
-
-// Full std::optional API
-ptr = &some_int;
-if (ptr) std::cout << **ptr;
-ptr.reset();
-auto v = val.value_or(42);
-auto mapped = ptr.transform([](int* p) { return *p; });
+int x = 42;
+slim::optional<int*> ptr = &x;    // 8 bytes, not 16
+if (ptr) std::cout << **ptr;      // 42
+ptr.reset();                      // empty
 ```
 
-### Built-in sentinel_traits
+Requires GCC 13+ or Clang 17+.
 
-These types work out of the box:
+## API
 
-| Type | Sentinel |
-|------|----------|
+The full `std::optional` interface — constructors, `value()`, `value_or()`, `operator*`, `operator->`, `reset()`, `emplace()`, `swap()`, and the C++23 monadic operations (`and_then`, `transform`, `or_else`). Plus CTAD:
+
+```cpp
+slim::optional opt(42);            // deduces optional<int>
+auto opt2 = slim::make_optional(&x);
+```
+
+## Supported types
+
+These work out of the box via built-in `sentinel_traits` specializations:
+
+| Type | Sentinel value |
+|------|---------------|
 | Signed integers (`int`, `int64_t`, ...) | `numeric_limits::min()` |
 | Unsigned integers (`unsigned`, `size_t`, ...) | `numeric_limits::max()` |
-| `float`, `double` | `NaN` (bit-exact) |
-| `long double` | `NaN` |
+| `float`, `double`, `long double` | NaN (any) |
 | Pointers (`T*`) | `nullptr` |
 | `char16_t`, `char32_t` | `0xFFFF`, `0xFFFFFFFF` |
-| `unique_ptr<T>`, `shared_ptr<T>`, `weak_ptr<T>` | null/empty |
+| `unique_ptr<T>`, `shared_ptr<T>` | null |
 | `string_view`, `span<T>` | null data pointer |
-| `function<F>`, `move_only_function<F>` | empty callable |
+| `function<F>`, `move_only_function<F>` | empty |
 | `coroutine_handle<P>` | null handle |
 | `any` | empty |
 
-### Custom types
+## Custom types
 
-Specialize `sentinel_traits` to enable `slim::optional` for your own types:
+Specialize `sentinel_traits` in namespace `slim` to opt in your own types:
 
 ```cpp
 enum class FileHandle : int { INVALID = -1, STDIN = 0, STDOUT = 1 };
@@ -87,36 +81,47 @@ struct sentinel_traits<FileHandle> {
 };
 }
 
-slim::optional<FileHandle> fd;                  // 4 bytes (std::optional = 8)
+slim::optional<FileHandle> fd;           // 4 bytes (std::optional<FileHandle> = 8)
 fd = FileHandle::STDOUT;
-// fd = FileHandle::INVALID;                    // throws bad_optional_access
 ```
 
-### Interop with std::optional
+## std::optional interop
+
+Construct from, convert to, and compare with `std::optional`. The `and_then` monadic operation accepts callbacks returning either `slim::optional` or `std::optional`.
 
 ```cpp
 std::optional<int*> std_opt = &x;
-slim::optional<int*> slim_opt(std_opt);         // construct from std::optional
-std::optional<int*> back = slim_opt;            // implicit conversion back
-assert(slim_opt == std_opt);                    // comparison works
+slim::optional<int*> slim_opt(std_opt);  // construct from std::optional
+std::optional<int*> back = slim_opt;     // implicit conversion back
+assert(slim_opt == std_opt);             // comparison works
+
+// and_then works with std::optional return type
+auto result = slim_opt.and_then([](int* p) -> std::optional<int> {
+    return *p * 2;
+});
 ```
 
-## Safety
+## Sentinel safety
 
-Assigning the sentinel value directly is a programming error and throws `slim::bad_optional_access`. Use `reset()` or `nullopt` to clear.
+Storing the sentinel value directly is a programming error and throws `slim::bad_optional_access`. Use `reset()` or `nullopt` to clear.
 
 ```cpp
-slim::optional<int*> opt;
-opt = nullptr;      // throws slim::bad_optional_access
-opt.reset();        // OK
+slim::optional<int*> opt(&x);
+opt = nullptr;       // throws slim::bad_optional_access
+opt.reset();         // OK
 opt = slim::nullopt; // OK
 ```
 
-## Project layout
+## Building from source
 
+```bash
+cmake -B build
+cmake --build build
+ctest --test-dir build          # run tests
+./build/examples/examples       # run examples
+./build/benchmarks/perf_bench   # run benchmarks
 ```
-include/slim/optional.hpp    # the library (header-only)
-tests/tests.cpp              # test suite
-examples/examples.cpp        # usage examples
-benchmarks/                  # memory and performance benchmarks
-```
+
+## License
+
+MIT

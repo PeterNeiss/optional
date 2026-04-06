@@ -8,6 +8,11 @@ target_include_directories(slim_optional INTERFACE
 )
 target_compile_features(slim_optional INTERFACE cxx_std_23)
 
+option(SLIM_OPTIONAL_LEAN_AND_MEAN "Minimize includes, disable std type sentinel_traits" OFF)
+if(SLIM_OPTIONAL_LEAN_AND_MEAN)
+    target_compile_definitions(slim_optional INTERFACE SLIM_OPTIONAL_LEAN_AND_MEAN)
+endif()
+
 enable_testing()
 add_subdirectory(tests)
 add_subdirectory(examples)

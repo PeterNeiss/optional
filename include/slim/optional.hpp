@@ -1,21 +1,29 @@
+// slim::optional — sentinel-based optional for C++23
+// Copyright (c) 2026 Peter Neiss
+// SPDX-License-Identifier: MIT
+
 #pragma once
 
-#include <any>
-#include <bit>
 #include <compare>
-#include <cmath>
 #include <concepts>
-#include <coroutine>
-#include <cstdint>
 #include <exception>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
-#include <span>
-#include <string_view>
 #include <type_traits>
 #include <utility>
+
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
+#include <any>
+#include <chrono>
+#include <complex>
+#include <coroutine>
+#include <functional>
+#include <span>
+#include <stop_token>
+#include <string_view>
+#include <thread>
+#endif
 
 namespace slim {
 
@@ -55,7 +63,7 @@ inline constexpr in_place_t in_place{};
 // ============================================================================
 
 // Primary template — undefined (opt-in via specialization)
-template<class T, class = void>
+template<class T>
 struct sentinel_traits;
 
 // Concept: does sentinel_traits<T> provide the required interface?
@@ -69,8 +77,8 @@ concept has_sentinel_traits = requires(const T& v) {
 
 // Signed integers (excluding bool)
 template<class T>
-struct sentinel_traits<T, std::enable_if_t<
-    std::signed_integral<T> && !std::same_as<T, bool>>>
+    requires (std::signed_integral<T> && !std::same_as<T, bool>)
+struct sentinel_traits<T>
 {
     static constexpr T sentinel() noexcept { return std::numeric_limits<T>::min(); }
     static constexpr bool is_sentinel(const T& v) noexcept { return v == std::numeric_limits<T>::min(); }
@@ -78,40 +86,31 @@ struct sentinel_traits<T, std::enable_if_t<
 
 // Unsigned integers (excluding bool, char8_t)
 template<class T>
-struct sentinel_traits<T, std::enable_if_t<
-    std::unsigned_integral<T> && !std::same_as<T, bool> && !std::same_as<T, char8_t>>>
+    requires (std::unsigned_integral<T> && !std::same_as<T, bool> && !std::same_as<T, char8_t>)
+struct sentinel_traits<T>
 {
     static constexpr T sentinel() noexcept { return std::numeric_limits<T>::max(); }
     static constexpr bool is_sentinel(const T& v) noexcept { return v == std::numeric_limits<T>::max(); }
 };
 
-// float — NaN sentinel with bit_cast comparison (NaN != NaN in normal ==)
+// float/double/long double — NaN sentinel, all NaN values disallowed.
+// v != v is true iff v is any NaN, and is constexpr everywhere.
 template<>
 struct sentinel_traits<float> {
     static constexpr float sentinel() noexcept { return std::numeric_limits<float>::quiet_NaN(); }
-    static constexpr bool is_sentinel(const float& v) noexcept {
-        return std::bit_cast<std::uint32_t>(v) ==
-               std::bit_cast<std::uint32_t>(std::numeric_limits<float>::quiet_NaN());
-    }
+    static constexpr bool is_sentinel(const float& v) noexcept { return v != v; }
 };
 
-// double — NaN sentinel with bit_cast comparison
 template<>
 struct sentinel_traits<double> {
     static constexpr double sentinel() noexcept { return std::numeric_limits<double>::quiet_NaN(); }
-    static constexpr bool is_sentinel(const double& v) noexcept {
-        return std::bit_cast<std::uint64_t>(v) ==
-               std::bit_cast<std::uint64_t>(std::numeric_limits<double>::quiet_NaN());
-    }
+    static constexpr bool is_sentinel(const double& v) noexcept { return v != v; }
 };
 
-// long double — NaN sentinel via isnan (can't portably bit_cast)
 template<>
 struct sentinel_traits<long double> {
     static constexpr long double sentinel() noexcept { return std::numeric_limits<long double>::quiet_NaN(); }
-    static constexpr bool is_sentinel(const long double& v) noexcept {
-        return std::isnan(v);
-    }
+    static constexpr bool is_sentinel(const long double& v) noexcept { return v != v; }
 };
 
 // Pointers → nullptr
@@ -137,6 +136,8 @@ struct sentinel_traits<char32_t> {
 
 // ── Standard library type specializations ──
 
+#ifndef SLIM_OPTIONAL_LEAN_AND_MEAN
+
 template<class T, class D>
 struct sentinel_traits<std::unique_ptr<T, D>> {
     static std::unique_ptr<T, D> sentinel() noexcept { return nullptr; }
@@ -149,10 +150,14 @@ struct sentinel_traits<std::shared_ptr<T>> {
     static bool is_sentinel(const std::shared_ptr<T>& v) noexcept { return !v; }
 };
 
-template<>
-struct sentinel_traits<std::string_view> {
-    static constexpr std::string_view sentinel() noexcept { return std::string_view{nullptr, 0}; }
-    static constexpr bool is_sentinel(const std::string_view& v) noexcept { return v.data() == nullptr; }
+template<class CharT, class Traits>
+struct sentinel_traits<std::basic_string_view<CharT, Traits>> {
+    static constexpr std::basic_string_view<CharT, Traits> sentinel() noexcept {
+        return std::basic_string_view<CharT, Traits>{nullptr, 0};
+    }
+    static constexpr bool is_sentinel(const std::basic_string_view<CharT, Traits>& v) noexcept {
+        return v.data() == nullptr;
+    }
 };
 
 template<class T, std::size_t E>
@@ -185,17 +190,96 @@ struct sentinel_traits<std::any> {
     static bool is_sentinel(const std::any& v) noexcept { return !v.has_value(); }
 };
 
+template<>
+struct sentinel_traits<std::thread::id> {
+    static constexpr std::thread::id sentinel() noexcept { return std::thread::id{}; }
+    static constexpr bool is_sentinel(const std::thread::id& v) noexcept { return v == std::thread::id{}; }
+};
+
+template<>
+struct sentinel_traits<std::stop_token> {
+    static std::stop_token sentinel() noexcept { return std::stop_token{}; }
+    static bool is_sentinel(const std::stop_token& v) noexcept { return !v.stop_possible(); }
+};
+
+// chrono::duration — uses the underlying Rep's sentinel (min() for integers, NaN for floats)
+template<class Rep, class Period>
+    requires has_sentinel_traits<Rep>
+struct sentinel_traits<std::chrono::duration<Rep, Period>> {
+    static constexpr std::chrono::duration<Rep, Period> sentinel() noexcept {
+        return std::chrono::duration<Rep, Period>{sentinel_traits<Rep>::sentinel()};
+    }
+    static constexpr bool is_sentinel(const std::chrono::duration<Rep, Period>& v) noexcept {
+        return sentinel_traits<Rep>::is_sentinel(v.count());
+    }
+};
+
+// chrono::time_point — uses the underlying Duration's sentinel
+template<class Clock, class Duration>
+    requires has_sentinel_traits<Duration>
+struct sentinel_traits<std::chrono::time_point<Clock, Duration>> {
+    static constexpr std::chrono::time_point<Clock, Duration> sentinel() noexcept {
+        return std::chrono::time_point<Clock, Duration>{sentinel_traits<Duration>::sentinel()};
+    }
+    static constexpr bool is_sentinel(const std::chrono::time_point<Clock, Duration>& v) noexcept {
+        return sentinel_traits<Duration>::is_sentinel(v.time_since_epoch());
+    }
+};
+
+template<class T>
+struct sentinel_traits<std::complex<T>> {
+    static constexpr std::complex<T> sentinel() noexcept {
+        return std::complex<T>{std::numeric_limits<T>::quiet_NaN(), std::numeric_limits<T>::quiet_NaN()};
+    }
+    static constexpr bool is_sentinel(const std::complex<T>& v) noexcept {
+        return v.real() != v.real();
+    }
+};
+
+#endif // !SLIM_OPTIONAL_LEAN_AND_MEAN
+
+// exception_ptr — available in both modes (uses <exception> which is always included)
+template<>
+struct sentinel_traits<std::exception_ptr> {
+    static constexpr std::exception_ptr sentinel() noexcept { return std::exception_ptr{}; }
+    static constexpr bool is_sentinel(const std::exception_ptr& v) noexcept { return !v; }
+};
+
+// ── Types deliberately NOT supported ──
+//
+// std::string, std::u8string, etc.  — empty string is a valid value
+// std::error_code                   — default (0) means "success", a valid value
+// std::weak_ptr<T>                  — expired state is indistinguishable from sentinel
+// std::variant<Ts...>               — cannot deliberately construct valueless state
+// std::future<T>, std::shared_future<T> — move-only, rarely stored in containers
+// std::filesystem::path             — empty path is a valid value
+// std::regex                        — heavyweight, niche use case
+// Containers (vector, map, etc.)    — empty is a valid state
+// std::reference_wrapper<T>         — always holds a reference, no empty state
+// Mutex/thread types                — not copyable or movable
+
 // ============================================================================
 // optional: sentinel-based optional with no bool flag
 // ============================================================================
 
 template<class T>
     requires has_sentinel_traits<T>
+class optional;
+
+// Helper trait to detect optional types (slim or std)
+namespace detail {
+template<class> inline constexpr bool is_optional_v = false;
+template<class T> inline constexpr bool is_optional_v<optional<T>> = true;
+template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
+}
+
+template<class T>
+    requires has_sentinel_traits<T>
 class optional {
     T value_;
 
-    constexpr void validate_not_sentinel() const {
-        if (sentinel_traits<T>::is_sentinel(value_)) {
+    static constexpr void validate_not_sentinel(const T& v) {
+        if (sentinel_traits<T>::is_sentinel(v)) {
             throw bad_optional_access("Cannot construct optional with sentinel value");
         }
     }
@@ -221,7 +305,7 @@ public:
     constexpr explicit optional(in_place_t, Args&&... args)
         : value_(std::forward<Args>(args)...)
     {
-        validate_not_sentinel();
+        validate_not_sentinel(value_);
     }
 
     template<class... Args>
@@ -229,7 +313,7 @@ public:
     constexpr explicit optional(std::in_place_t, Args&&... args)
         : value_(std::forward<Args>(args)...)
     {
-        validate_not_sentinel();
+        validate_not_sentinel(value_);
     }
 
     template<class U = T>
@@ -243,7 +327,7 @@ public:
     optional(U&& value)
         : value_(std::forward<U>(value))
     {
-        validate_not_sentinel();
+        validate_not_sentinel(value_);
     }
 
     // Construct from another optional with different T
@@ -254,7 +338,7 @@ public:
         : value_(other.has_value() ? *other : sentinel_traits<T>::sentinel())
     {
         if (has_value()) {
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         }
     }
 
@@ -265,7 +349,7 @@ public:
         : value_(other.has_value() ? std::move(*other) : sentinel_traits<T>::sentinel())
     {
         if (has_value()) {
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         }
     }
 
@@ -277,7 +361,7 @@ public:
         : value_(other.has_value() ? *other : sentinel_traits<T>::sentinel())
     {
         if (has_value()) {
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         }
     }
 
@@ -288,11 +372,10 @@ public:
         : value_(other.has_value() ? std::move(*other) : sentinel_traits<T>::sentinel())
     {
         if (has_value()) {
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         }
     }
 
-    // Destructor (trivial for sentinel-based)
     constexpr ~optional() = default;
 
     // Assignment
@@ -315,7 +398,7 @@ public:
                   std::is_assignable_v<T&, U>)
     constexpr optional& operator=(U&& value) {
         value_ = std::forward<U>(value);
-        validate_not_sentinel();
+        validate_not_sentinel(value_);
         return *this;
     }
 
@@ -325,7 +408,7 @@ public:
     constexpr optional& operator=(const optional<U>& other) {
         if (other.has_value()) {
             value_ = *other;
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         } else {
             value_ = sentinel_traits<T>::sentinel();
         }
@@ -338,7 +421,7 @@ public:
     constexpr optional& operator=(optional<U>&& other) {
         if (other.has_value()) {
             value_ = std::move(*other);
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         } else {
             value_ = sentinel_traits<T>::sentinel();
         }
@@ -352,7 +435,7 @@ public:
     constexpr optional& operator=(const std::optional<U>& other) {
         if (other.has_value()) {
             value_ = *other;
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         } else {
             value_ = sentinel_traits<T>::sentinel();
         }
@@ -365,7 +448,7 @@ public:
     constexpr optional& operator=(std::optional<U>&& other) {
         if (other.has_value()) {
             value_ = std::move(*other);
-            validate_not_sentinel();
+            validate_not_sentinel(value_);
         } else {
             value_ = sentinel_traits<T>::sentinel();
         }
@@ -463,8 +546,9 @@ public:
     template<class... Args>
         requires std::is_constructible_v<T, Args...>
     constexpr T& emplace(Args&&... args) {
-        value_ = T(std::forward<Args>(args)...);
-        validate_not_sentinel();
+        T tmp(std::forward<Args>(args)...);
+        validate_not_sentinel(tmp);
+        value_ = std::move(tmp);
         return value_;
     }
 
@@ -479,40 +563,44 @@ public:
 
     // Monadic operations (C++23)
     template<class F>
+        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, T&>>>
     constexpr auto and_then(F&& f) & {
         using U = std::remove_cvref_t<std::invoke_result_t<F, T&>>;
         if (has_value()) {
-            return std::invoke(std::forward<F>(f), value_);
+            return std::forward<F>(f)(value_);
         } else {
             return U{};
         }
     }
 
     template<class F>
+        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, const T&>>>
     constexpr auto and_then(F&& f) const & {
         using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
         if (has_value()) {
-            return std::invoke(std::forward<F>(f), value_);
+            return std::forward<F>(f)(value_);
         } else {
             return U{};
         }
     }
 
     template<class F>
+        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, T&&>>>
     constexpr auto and_then(F&& f) && {
         using U = std::remove_cvref_t<std::invoke_result_t<F, T&&>>;
         if (has_value()) {
-            return std::invoke(std::forward<F>(f), std::move(value_));
+            return std::forward<F>(f)(std::move(value_));
         } else {
             return U{};
         }
     }
 
     template<class F>
+        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, const T&&>>>
     constexpr auto and_then(F&& f) const && {
         using U = std::remove_cvref_t<std::invoke_result_t<F, const T&&>>;
         if (has_value()) {
-            return std::invoke(std::forward<F>(f), std::move(value_));
+            return std::forward<F>(f)(std::move(value_));
         } else {
             return U{};
         }
@@ -521,40 +609,72 @@ public:
     template<class F>
     constexpr auto transform(F&& f) & {
         using U = std::remove_cvref_t<std::invoke_result_t<F, T&>>;
-        if (has_value()) {
-            return std::optional<U>{std::invoke(std::forward<F>(f), value_)};
+        if constexpr (has_sentinel_traits<U>) {
+            if (has_value()) {
+                return optional<U>{std::forward<F>(f)(value_)};
+            } else {
+                return optional<U>{};
+            }
         } else {
-            return std::optional<U>{};
+            if (has_value()) {
+                return std::optional<U>{std::forward<F>(f)(value_)};
+            } else {
+                return std::optional<U>{};
+            }
         }
     }
 
     template<class F>
     constexpr auto transform(F&& f) const & {
         using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
-        if (has_value()) {
-            return std::optional<U>{std::invoke(std::forward<F>(f), value_)};
+        if constexpr (has_sentinel_traits<U>) {
+            if (has_value()) {
+                return optional<U>{std::forward<F>(f)(value_)};
+            } else {
+                return optional<U>{};
+            }
         } else {
-            return std::optional<U>{};
+            if (has_value()) {
+                return std::optional<U>{std::forward<F>(f)(value_)};
+            } else {
+                return std::optional<U>{};
+            }
         }
     }
 
     template<class F>
     constexpr auto transform(F&& f) && {
         using U = std::remove_cvref_t<std::invoke_result_t<F, T&&>>;
-        if (has_value()) {
-            return std::optional<U>{std::invoke(std::forward<F>(f), std::move(value_))};
+        if constexpr (has_sentinel_traits<U>) {
+            if (has_value()) {
+                return optional<U>{std::forward<F>(f)(std::move(value_))};
+            } else {
+                return optional<U>{};
+            }
         } else {
-            return std::optional<U>{};
+            if (has_value()) {
+                return std::optional<U>{std::forward<F>(f)(std::move(value_))};
+            } else {
+                return std::optional<U>{};
+            }
         }
     }
 
     template<class F>
     constexpr auto transform(F&& f) const && {
         using U = std::remove_cvref_t<std::invoke_result_t<F, const T&&>>;
-        if (has_value()) {
-            return std::optional<U>{std::invoke(std::forward<F>(f), std::move(value_))};
+        if constexpr (has_sentinel_traits<U>) {
+            if (has_value()) {
+                return optional<U>{std::forward<F>(f)(std::move(value_))};
+            } else {
+                return optional<U>{};
+            }
         } else {
-            return std::optional<U>{};
+            if (has_value()) {
+                return std::optional<U>{std::forward<F>(f)(std::move(value_))};
+            } else {
+                return std::optional<U>{};
+            }
         }
     }
 
@@ -563,7 +683,7 @@ public:
         if (has_value()) {
             return *this;
         } else {
-            return std::invoke(std::forward<F>(f));
+            return std::forward<F>(f)();
         }
     }
 
@@ -572,17 +692,10 @@ public:
         if (has_value()) {
             return std::move(*this);
         } else {
-            return std::invoke(std::forward<F>(f));
+            return std::forward<F>(f)();
         }
     }
 };
-
-// Helper trait to exclude optional types from heterogeneous comparisons
-namespace detail {
-template<class> inline constexpr bool is_optional_v = false;
-template<class T> inline constexpr bool is_optional_v<optional<T>> = true;
-template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
-}
 
 // ============================================================================
 // Comparison operators — optional vs optional
@@ -704,6 +817,10 @@ template<class T, class... Args>
 constexpr optional<T> make_optional(Args&&... args) {
     return optional<T>(in_place, std::forward<Args>(args)...);
 }
+
+// Deduction guide
+template<class T>
+optional(T) -> optional<T>;
 
 // ============================================================================
 // Hash support
