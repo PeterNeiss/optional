@@ -7,7 +7,7 @@
 #include <random>
 #include <numeric>
 
-using namespace std_proposal;
+using namespace slim;
 
 // Timer utility
 class Timer {
@@ -51,7 +51,7 @@ double benchmark(const char* name, Func&& func, size_t iterations = 1000000) {
 }
 
 int main() {
-    std::cout << "slim_optional: Performance Benchmarks\n";
+    std::cout << "optional: Performance Benchmarks\n";
     std::cout << "================================================\n\n";
 
     std::cout << "Note: Lower times are better. All benchmarks run 1,000,000 iterations.\n\n";
@@ -72,9 +72,9 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: default construction", [](size_t n) {
+    benchmark("optional: default construction", [](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            slim_optional<int*, nullptr> opt;
+            optional<int*, nullptr> opt;
             do_not_optimize(opt);
         }
     });
@@ -88,9 +88,9 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: value construction", [&](size_t n) {
+    benchmark("optional: value construction", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            slim_optional<int*, nullptr> opt(&dummy);
+            optional<int*, nullptr> opt(&dummy);
             do_not_optimize(opt);
         }
     });
@@ -105,10 +105,10 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: copy construction", [&](size_t n) {
-        slim_optional<int*, nullptr> src(&dummy);
+    benchmark("optional: copy construction", [&](size_t n) {
+        optional<int*, nullptr> src(&dummy);
         for (size_t i = 0; i < n; ++i) {
-            slim_optional<int*, nullptr> opt(src);
+            optional<int*, nullptr> opt(src);
             do_not_optimize(opt);
         }
     });
@@ -130,8 +130,8 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: value assignment", [&](size_t n) {
-        slim_optional<int*, nullptr> opt;
+    benchmark("optional: value assignment", [&](size_t n) {
+        optional<int*, nullptr> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = &dummy;
             do_not_optimize(opt);
@@ -148,8 +148,8 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: nullopt assignment", [](size_t n) {
-        slim_optional<int*, nullptr> opt;
+    benchmark("optional: nullopt assignment", [](size_t n) {
+        optional<int*, nullptr> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = nullopt;
             do_not_optimize(opt);
@@ -174,8 +174,8 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: has_value() check", [&](size_t n) {
-        slim_optional<int*, nullptr> opt(&dummy);
+    benchmark("optional: has_value() check", [&](size_t n) {
+        optional<int*, nullptr> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = opt.has_value();
@@ -201,8 +201,8 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: operator* access", [&](size_t n) {
-        slim_optional<int*, nullptr> opt(&dummy);
+    benchmark("optional: operator* access", [&](size_t n) {
+        optional<int*, nullptr> opt(&dummy);
         volatile int* result;
         for (size_t i = 0; i < n; ++i) {
             result = *opt;
@@ -223,10 +223,10 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: operator-> access", [&](size_t n) {
+    benchmark("optional: operator-> access", [&](size_t n) {
         struct S { int value; };
         S s{42};
-        slim_optional<S*, nullptr> opt(&s);
+        optional<S*, nullptr> opt(&s);
         volatile int result;
         for (size_t i = 0; i < n; ++i) {
             result = (*opt)->value;
@@ -253,9 +253,9 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: equality comparison", [&](size_t n) {
-        slim_optional<int*, nullptr> opt1(&dummy);
-        slim_optional<int*, nullptr> opt2(&dummy);
+    benchmark("optional: equality comparison", [&](size_t n) {
+        optional<int*, nullptr> opt1(&dummy);
+        optional<int*, nullptr> opt2(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt1 == opt2);
@@ -274,8 +274,8 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: nullopt comparison", [&](size_t n) {
-        slim_optional<int*, nullptr> opt(&dummy);
+    benchmark("optional: nullopt comparison", [&](size_t n) {
+        optional<int*, nullptr> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt == nullopt);
@@ -300,8 +300,8 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: transform", [&](size_t n) {
-        slim_optional<int*, nullptr> opt(&dummy);
+    benchmark("optional: transform", [&](size_t n) {
+        optional<int*, nullptr> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
             auto result = opt.transform([](int* p) { return p; });
             do_not_optimize(result);
@@ -318,10 +318,10 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: and_then", [&](size_t n) {
-        slim_optional<int*, nullptr> opt(&dummy);
+    benchmark("optional: and_then", [&](size_t n) {
+        optional<int*, nullptr> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
-            auto result = opt.and_then([](int* p) -> slim_optional<int*, nullptr> { return p; });
+            auto result = opt.and_then([](int* p) -> optional<int*, nullptr> { return p; });
             do_not_optimize(result);
         }
     });
@@ -350,8 +350,8 @@ int main() {
         }
     }, container_size);
 
-    benchmark("slim_optional: vector iteration", [&](size_t n) {
-        std::vector<slim_optional<int*, nullptr>> vec(container_size, &dummy);
+    benchmark("optional: vector iteration", [&](size_t n) {
+        std::vector<optional<int*, nullptr>> vec(container_size, &dummy);
         for (size_t i = 0; i < n / container_size; ++i) {
             size_t sum = 0;
             for (const auto& opt : vec) {
@@ -385,9 +385,9 @@ int main() {
         }
     });
 
-    benchmark("slim_optional: mixed pattern", [&](size_t n) {
+    benchmark("optional: mixed pattern", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            slim_optional<int*, nullptr> opt(&dummy);  // Create
+            optional<int*, nullptr> opt(&dummy);  // Create
             bool has = opt.has_value();                // Check
             if (has) {
                 int* val = *opt;                       // Access
@@ -426,8 +426,8 @@ int main() {
         }
     }, cache_size);
 
-    double slim_time = benchmark("slim_optional: sequential sum", [&](size_t n) {
-        std::vector<slim_optional<int, -1>> vec(cache_size);
+    double slim_time = benchmark("optional: sequential sum", [&](size_t n) {
+        std::vector<optional<int, -1>> vec(cache_size);
         for (size_t i = 0; i < cache_size; ++i) {
             vec[i] = static_cast<int>(i);
         }
@@ -460,9 +460,9 @@ int main() {
     std::cout << "- has_value(): Comparison vs bool load (similar)\n";
     std::cout << "- Value access: Identical (no checking)\n";
     std::cout << "- Memory access: Better cache utilization due to smaller size\n";
-    std::cout << "- Overall: slim_optional is equivalent or better\n\n";
+    std::cout << "- Overall: optional is equivalent or better\n\n";
 
-    std::cout << "Key takeaway: slim_optional provides significant memory\n";
+    std::cout << "Key takeaway: optional provides significant memory\n";
     std::cout << "savings (50%) with no performance penalty, and often better cache\n";
     std::cout << "performance due to smaller size.\n";
 

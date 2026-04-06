@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-using namespace std_proposal;
+using namespace slim;
 
 // Helper to print table rows
 void print_row(const char* type, size_t std_size, size_t slim_size) {
@@ -39,56 +39,56 @@ struct Handle {
 constexpr Handle INVALID_HANDLE{-1};
 
 int main() {
-    std::cout << "slim_optional: Memory Usage Benchmarks\n";
+    std::cout << "optional: Memory Usage Benchmarks\n";
     std::cout << "=================================================\n\n";
 
     std::cout << "Testing on " << (sizeof(void*) == 8 ? "64-bit" : "32-bit") << " system\n\n";
 
     std::cout << std::left << std::setw(40) << "Type"
               << std::right << std::setw(12) << "std::optional"
-              << std::setw(12) << "slim_optional"
+              << std::setw(12) << "optional"
               << std::setw(12) << "Savings\n";
     std::cout << std::string(76, '-') << "\n";
 
     // Pointer types
     print_row("optional<int*>",
               sizeof(std::optional<int*>),
-              sizeof(slim_optional<int*, nullptr>));
+              sizeof(optional<int*, nullptr>));
 
     print_row("optional<void*>",
               sizeof(std::optional<void*>),
-              sizeof(slim_optional<void*, nullptr>));
+              sizeof(optional<void*, nullptr>));
 
     print_row("optional<const char*>",
               sizeof(std::optional<const char*>),
-              sizeof(slim_optional<const char*, nullptr>));
+              sizeof(optional<const char*, nullptr>));
 
     // Integer types
     print_row("optional<int32_t>",
               sizeof(std::optional<int32_t>),
-              sizeof(slim_optional<int32_t, -1>));
+              sizeof(optional<int32_t, -1>));
 
     print_row("optional<int64_t>",
               sizeof(std::optional<int64_t>),
-              sizeof(slim_optional<int64_t, -1L>));
+              sizeof(optional<int64_t, -1L>));
 
     print_row("optional<size_t>",
               sizeof(std::optional<size_t>),
-              sizeof(slim_optional<size_t, static_cast<size_t>(-1)>));
+              sizeof(optional<size_t, static_cast<size_t>(-1)>));
 
     // Enum types
     print_row("optional<FileHandle>",
               sizeof(std::optional<FileHandle>),
-              sizeof(slim_optional<FileHandle, FileHandle::INVALID>));
+              sizeof(optional<FileHandle, FileHandle::INVALID>));
 
     print_row("optional<ByteEnum>",
               sizeof(std::optional<ByteEnum>),
-              sizeof(slim_optional<ByteEnum, ByteEnum::INVALID>));
+              sizeof(optional<ByteEnum, ByteEnum::INVALID>));
 
     // Custom struct
     print_row("optional<Handle>",
               sizeof(std::optional<Handle>),
-              sizeof(slim_optional<Handle, INVALID_HANDLE>));
+              sizeof(optional<Handle, INVALID_HANDLE>));
 
     std::cout << "\n";
     std::cout << "Container Memory Usage\n";
@@ -101,12 +101,12 @@ int main() {
     // Vector of optional pointers
     {
         size_t std_total = container_size * sizeof(std::optional<int*>);
-        size_t slim_total = container_size * sizeof(slim_optional<int*, nullptr>);
+        size_t slim_total = container_size * sizeof(optional<int*, nullptr>);
 
         std::cout << "vector<optional<int*>>:\n";
         std::cout << "  std::optional:   " << std_total << " bytes ("
                   << (std_total / 1024.0) << " KB)\n";
-        std::cout << "  slim_optional:   " << slim_total << " bytes ("
+        std::cout << "  optional:   " << slim_total << " bytes ("
                   << (slim_total / 1024.0) << " KB)\n";
         std::cout << "  Savings:         " << (std_total - slim_total) << " bytes ("
                   << ((std_total - slim_total) / 1024.0) << " KB, "
@@ -116,12 +116,12 @@ int main() {
     // Vector of optional int32_t
     {
         size_t std_total = container_size * sizeof(std::optional<int32_t>);
-        size_t slim_total = container_size * sizeof(slim_optional<int32_t, -1>);
+        size_t slim_total = container_size * sizeof(optional<int32_t, -1>);
 
         std::cout << "vector<optional<int32_t>>:\n";
         std::cout << "  std::optional:   " << std_total << " bytes ("
                   << (std_total / 1024.0) << " KB)\n";
-        std::cout << "  slim_optional:   " << slim_total << " bytes ("
+        std::cout << "  optional:   " << slim_total << " bytes ("
                   << (slim_total / 1024.0) << " KB)\n";
         std::cout << "  Savings:         " << (std_total - slim_total) << " bytes ("
                   << ((std_total - slim_total) / 1024.0) << " KB, "
@@ -131,12 +131,12 @@ int main() {
     // Vector of optional enums
     {
         size_t std_total = container_size * sizeof(std::optional<FileHandle>);
-        size_t slim_total = container_size * sizeof(slim_optional<FileHandle, FileHandle::INVALID>);
+        size_t slim_total = container_size * sizeof(optional<FileHandle, FileHandle::INVALID>);
 
         std::cout << "vector<optional<FileHandle>>:\n";
         std::cout << "  std::optional:   " << std_total << " bytes ("
                   << (std_total / 1024.0) << " KB)\n";
-        std::cout << "  slim_optional:   " << slim_total << " bytes ("
+        std::cout << "  optional:   " << slim_total << " bytes ("
                   << (slim_total / 1024.0) << " KB)\n";
         std::cout << "  Savings:         " << (std_total - slim_total) << " bytes ("
                   << ((std_total - slim_total) / 1024.0) << " KB, "
@@ -153,28 +153,28 @@ int main() {
     // 1 million pointers
     {
         size_t std_total = million * sizeof(std::optional<int*>);
-        size_t slim_total = million * sizeof(slim_optional<int*, nullptr>);
+        size_t slim_total = million * sizeof(optional<int*, nullptr>);
         double std_mb = std_total / (1024.0 * 1024.0);
         double slim_mb = slim_total / (1024.0 * 1024.0);
 
         std::cout << "1 million optional<int*>:\n";
         std::cout << "  std::optional:   " << std::fixed << std::setprecision(2)
                   << std_mb << " MB\n";
-        std::cout << "  slim_optional:   " << slim_mb << " MB\n";
+        std::cout << "  optional:   " << slim_mb << " MB\n";
         std::cout << "  Savings:         " << (std_mb - slim_mb) << " MB\n\n";
     }
 
     // 1 billion int32_t
     {
         size_t std_total = billion * sizeof(std::optional<int32_t>);
-        size_t slim_total = billion * sizeof(slim_optional<int32_t, -1>);
+        size_t slim_total = billion * sizeof(optional<int32_t, -1>);
         double std_gb = std_total / (1024.0 * 1024.0 * 1024.0);
         double slim_gb = slim_total / (1024.0 * 1024.0 * 1024.0);
 
         std::cout << "1 billion optional<int32_t>:\n";
         std::cout << "  std::optional:   " << std::fixed << std::setprecision(2)
                   << std_gb << " GB\n";
-        std::cout << "  slim_optional:   " << slim_gb << " GB\n";
+        std::cout << "  optional:   " << slim_gb << " GB\n";
         std::cout << "  Savings:         " << (std_gb - slim_gb) << " GB\n\n";
     }
 
@@ -189,11 +189,11 @@ int main() {
     // Pointers
     {
         size_t std_per_line = cache_line_size / sizeof(std::optional<int*>);
-        size_t slim_per_line = cache_line_size / sizeof(slim_optional<int*, nullptr>);
+        size_t slim_per_line = cache_line_size / sizeof(optional<int*, nullptr>);
 
         std::cout << "optional<int*> per cache line:\n";
         std::cout << "  std::optional:   " << std_per_line << "\n";
-        std::cout << "  slim_optional:   " << slim_per_line << "\n";
+        std::cout << "  optional:   " << slim_per_line << "\n";
         std::cout << "  Improvement:     " << (100.0 * (slim_per_line - std_per_line) / std_per_line)
                   << "% more items per cache line\n\n";
     }
@@ -201,11 +201,11 @@ int main() {
     // int32_t
     {
         size_t std_per_line = cache_line_size / sizeof(std::optional<int32_t>);
-        size_t slim_per_line = cache_line_size / sizeof(slim_optional<int32_t, -1>);
+        size_t slim_per_line = cache_line_size / sizeof(optional<int32_t, -1>);
 
         std::cout << "optional<int32_t> per cache line:\n";
         std::cout << "  std::optional:   " << std_per_line << "\n";
-        std::cout << "  slim_optional:   " << slim_per_line << "\n";
+        std::cout << "  optional:   " << slim_per_line << "\n";
         std::cout << "  Improvement:     " << (100.0 * (slim_per_line - std_per_line) / std_per_line)
                   << "% more items per cache line\n\n";
     }
@@ -219,18 +219,18 @@ int main() {
     std::cout << "  total:          " << sizeof(std::optional<int*>) << " bytes\n";
     std::cout << "  (bool + padding + pointer)\n\n";
 
-    std::cout << "slim_optional<int*, nullptr>:\n";
+    std::cout << "optional<int*, nullptr>:\n";
     std::cout << "  sizeof(int*):   " << sizeof(int*) << " bytes\n";
-    std::cout << "  total:          " << sizeof(slim_optional<int*, nullptr>) << " bytes\n";
+    std::cout << "  total:          " << sizeof(optional<int*, nullptr>) << " bytes\n";
     std::cout << "  padding:        0 bytes (no overhead!)\n\n";
 
     std::cout << "std::optional<int32_t>:\n";
     std::cout << "  total:          " << sizeof(std::optional<int32_t>) << " bytes\n";
     std::cout << "  (bool + padding + int32_t)\n\n";
 
-    std::cout << "slim_optional<int32_t, -1>:\n";
+    std::cout << "optional<int32_t, -1>:\n";
     std::cout << "  sizeof(int32_t):" << sizeof(int32_t) << " bytes\n";
-    std::cout << "  total:          " << sizeof(slim_optional<int32_t, -1>) << " bytes\n";
+    std::cout << "  total:          " << sizeof(optional<int32_t, -1>) << " bytes\n";
     std::cout << "  padding:        0 bytes (no overhead!)\n\n";
 
     return 0;
