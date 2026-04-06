@@ -1,10 +1,18 @@
 #pragma once
 
+#include <any>
+#include <bit>
+#include <cmath>
 #include <concepts>
+#include <coroutine>
+#include <cstdint>
 #include <exception>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <span>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -37,23 +45,199 @@ struct in_place_t {
 inline constexpr in_place_t in_place{};
 
 // ============================================================================
+// auto_sentinel_t: a structural NTTP tag type that selects sentinel behavior
+// via sentinel_traits<T> when used as the default SentinelValue.
+// ============================================================================
+
+struct auto_sentinel_t {
+    constexpr auto operator<=>(const auto_sentinel_t&) const = default;
+};
+
+inline constexpr auto_sentinel_t auto_sentinel;
+
+// ============================================================================
+// sentinel_traits<T>: customization point for sentinel values.
+//
+// Users specialize this for their own types to enable auto_sentinel support.
+// Each specialization must provide:
+//   static [constexpr] T sentinel() noexcept;
+//   static [constexpr] bool is_sentinel(const T& v) noexcept;
+// ============================================================================
+
+// Primary template — undefined (opt-in via specialization)
+template<class T, class = void>
+struct sentinel_traits;
+
+// Concept: does sentinel_traits<T> provide the required interface?
+template<class T>
+concept has_sentinel_traits = requires(const T& v) {
+    { sentinel_traits<T>::sentinel() };
+    { sentinel_traits<T>::is_sentinel(v) } -> std::same_as<bool>;
+};
+
+// ── Scalar specializations ──
+
+// Signed integers (excluding bool)
+template<class T>
+struct sentinel_traits<T, std::enable_if_t<
+    std::signed_integral<T> && !std::same_as<T, bool>>>
+{
+    static constexpr T sentinel() noexcept { return std::numeric_limits<T>::min(); }
+    static constexpr bool is_sentinel(const T& v) noexcept { return v == std::numeric_limits<T>::min(); }
+};
+
+// Unsigned integers (excluding bool, char8_t)
+template<class T>
+struct sentinel_traits<T, std::enable_if_t<
+    std::unsigned_integral<T> && !std::same_as<T, bool> && !std::same_as<T, char8_t>>>
+{
+    static constexpr T sentinel() noexcept { return std::numeric_limits<T>::max(); }
+    static constexpr bool is_sentinel(const T& v) noexcept { return v == std::numeric_limits<T>::max(); }
+};
+
+// float — NaN sentinel with bit_cast comparison (NaN != NaN in normal ==)
+template<>
+struct sentinel_traits<float> {
+    static constexpr float sentinel() noexcept { return std::numeric_limits<float>::quiet_NaN(); }
+    static constexpr bool is_sentinel(const float& v) noexcept {
+        return std::bit_cast<std::uint32_t>(v) ==
+               std::bit_cast<std::uint32_t>(std::numeric_limits<float>::quiet_NaN());
+    }
+};
+
+// double — NaN sentinel with bit_cast comparison
+template<>
+struct sentinel_traits<double> {
+    static constexpr double sentinel() noexcept { return std::numeric_limits<double>::quiet_NaN(); }
+    static constexpr bool is_sentinel(const double& v) noexcept {
+        return std::bit_cast<std::uint64_t>(v) ==
+               std::bit_cast<std::uint64_t>(std::numeric_limits<double>::quiet_NaN());
+    }
+};
+
+// long double — NaN sentinel via isnan (can't portably bit_cast)
+template<>
+struct sentinel_traits<long double> {
+    static constexpr long double sentinel() noexcept { return std::numeric_limits<long double>::quiet_NaN(); }
+    static constexpr bool is_sentinel(const long double& v) noexcept {
+        return std::isnan(v);
+    }
+};
+
+// Pointers → nullptr
+template<class T>
+struct sentinel_traits<T*> {
+    static constexpr T* sentinel() noexcept { return nullptr; }
+    static constexpr bool is_sentinel(T* const& v) noexcept { return v == nullptr; }
+};
+
+// char16_t → 0xFFFF (Unicode noncharacter)
+template<>
+struct sentinel_traits<char16_t> {
+    static constexpr char16_t sentinel() noexcept { return 0xFFFF; }
+    static constexpr bool is_sentinel(const char16_t& v) noexcept { return v == static_cast<char16_t>(0xFFFF); }
+};
+
+// char32_t → 0xFFFFFFFF (beyond Unicode range)
+template<>
+struct sentinel_traits<char32_t> {
+    static constexpr char32_t sentinel() noexcept { return 0xFFFFFFFF; }
+    static constexpr bool is_sentinel(const char32_t& v) noexcept { return v == static_cast<char32_t>(0xFFFFFFFF); }
+};
+
+// ── Standard library type specializations ──
+
+template<class T, class D>
+struct sentinel_traits<std::unique_ptr<T, D>> {
+    static std::unique_ptr<T, D> sentinel() noexcept { return nullptr; }
+    static bool is_sentinel(const std::unique_ptr<T, D>& v) noexcept { return !v; }
+};
+
+template<class T>
+struct sentinel_traits<std::shared_ptr<T>> {
+    static std::shared_ptr<T> sentinel() noexcept { return nullptr; }
+    static bool is_sentinel(const std::shared_ptr<T>& v) noexcept { return !v; }
+};
+
+template<>
+struct sentinel_traits<std::string_view> {
+    static constexpr std::string_view sentinel() noexcept { return std::string_view{nullptr, 0}; }
+    static constexpr bool is_sentinel(const std::string_view& v) noexcept { return v.data() == nullptr; }
+};
+
+template<class T, std::size_t E>
+struct sentinel_traits<std::span<T, E>> {
+    static constexpr std::span<T, E> sentinel() noexcept { return std::span<T, E>{}; }
+    static constexpr bool is_sentinel(const std::span<T, E>& v) noexcept { return v.data() == nullptr; }
+};
+
+template<class F>
+struct sentinel_traits<std::function<F>> {
+    static std::function<F> sentinel() noexcept { return nullptr; }
+    static bool is_sentinel(const std::function<F>& v) noexcept { return !v; }
+};
+
+template<class F>
+struct sentinel_traits<std::move_only_function<F>> {
+    static std::move_only_function<F> sentinel() noexcept { return {}; }
+    static bool is_sentinel(const std::move_only_function<F>& v) noexcept { return !v; }
+};
+
+template<class T>
+struct sentinel_traits<std::weak_ptr<T>> {
+    static std::weak_ptr<T> sentinel() noexcept { return std::weak_ptr<T>{}; }
+    static bool is_sentinel(const std::weak_ptr<T>& v) noexcept { return v.expired() && v.use_count() == 0; }
+};
+
+template<class P>
+struct sentinel_traits<std::coroutine_handle<P>> {
+    static constexpr std::coroutine_handle<P> sentinel() noexcept { return std::coroutine_handle<P>{}; }
+    static constexpr bool is_sentinel(const std::coroutine_handle<P>& v) noexcept { return !v; }
+};
+
+template<>
+struct sentinel_traits<std::any> {
+    static std::any sentinel() noexcept { return std::any{}; }
+    static bool is_sentinel(const std::any& v) noexcept { return !v.has_value(); }
+};
+
+// ============================================================================
 // slim_optional: sentinel-based optional with no bool flag
 // ============================================================================
 
-template<class T, auto SentinelValue>
-    requires (std::same_as<std::remove_cv_t<decltype(SentinelValue)>, std::remove_cv_t<T>> ||
-              std::convertible_to<decltype(SentinelValue), T>)
+template<class T, auto SentinelValue = auto_sentinel>
+    requires (
+        (std::same_as<std::remove_cv_t<decltype(SentinelValue)>, auto_sentinel_t> && has_sentinel_traits<T>) ||
+        (!std::same_as<std::remove_cv_t<decltype(SentinelValue)>, auto_sentinel_t> &&
+         (std::same_as<std::remove_cv_t<decltype(SentinelValue)>, std::remove_cv_t<T>> ||
+          std::convertible_to<decltype(SentinelValue), T>))
+    )
 class slim_optional {
+    static constexpr bool uses_traits =
+        std::same_as<std::remove_cv_t<decltype(SentinelValue)>, auto_sentinel_t>;
+
     T value_;
 
-    // Helper to validate not constructing with sentinel
+    // Sentinel helpers — dispatch between traits and explicit NTTP
+    static constexpr auto make_sentinel() {
+        if constexpr (uses_traits) {
+            return sentinel_traits<T>::sentinel();
+        } else {
+            return static_cast<T>(SentinelValue);
+        }
+    }
+
+    constexpr bool check_is_sentinel() const {
+        if constexpr (uses_traits) {
+            return sentinel_traits<T>::is_sentinel(value_);
+        } else {
+            return value_ == SentinelValue;
+        }
+    }
+
     constexpr void validate_not_sentinel() const {
-        if (value_ == SentinelValue) {
-            if (std::is_constant_evaluated()) {
-                throw bad_optional_access("Cannot construct slim_optional with sentinel value");
-            } else {
-                throw bad_optional_access("Cannot construct slim_optional with sentinel value");
-            }
+        if (check_is_sentinel()) {
+            throw bad_optional_access("Cannot construct slim_optional with sentinel value");
         }
     }
 
@@ -62,13 +246,13 @@ public:
 
     // Constructors
     constexpr slim_optional() noexcept(std::is_nothrow_copy_constructible_v<T>)
-        : value_(SentinelValue) {}
+        : value_(make_sentinel()) {}
 
     constexpr slim_optional(nullopt_t) noexcept(std::is_nothrow_copy_constructible_v<T>)
-        : value_(SentinelValue) {}
+        : value_(make_sentinel()) {}
 
     constexpr slim_optional(std::nullopt_t) noexcept(std::is_nothrow_copy_constructible_v<T>)
-        : value_(SentinelValue) {}
+        : value_(make_sentinel()) {}
 
     constexpr slim_optional(const slim_optional& other) = default;
     constexpr slim_optional(slim_optional&& other) noexcept = default;
@@ -108,7 +292,7 @@ public:
         requires std::is_constructible_v<T, const U&>
     constexpr explicit(!std::is_convertible_v<const U&, T>)
     slim_optional(const slim_optional<U, S>& other)
-        : value_(other.has_value() ? *other : SentinelValue)
+        : value_(other.has_value() ? *other : make_sentinel())
     {
         if (has_value()) {
             validate_not_sentinel();
@@ -119,7 +303,7 @@ public:
         requires std::is_constructible_v<T, U&&>
     constexpr explicit(!std::is_convertible_v<U&&, T>)
     slim_optional(slim_optional<U, S>&& other)
-        : value_(other.has_value() ? std::move(*other) : SentinelValue)
+        : value_(other.has_value() ? std::move(*other) : make_sentinel())
     {
         if (has_value()) {
             validate_not_sentinel();
@@ -131,7 +315,7 @@ public:
         requires std::is_constructible_v<T, const U&>
     constexpr explicit(!std::is_convertible_v<const U&, T>)
     slim_optional(const std::optional<U>& other)
-        : value_(other.has_value() ? *other : SentinelValue)
+        : value_(other.has_value() ? *other : make_sentinel())
     {
         if (has_value()) {
             validate_not_sentinel();
@@ -142,7 +326,7 @@ public:
         requires std::is_constructible_v<T, U&&>
     constexpr explicit(!std::is_convertible_v<U&&, T>)
     slim_optional(std::optional<U>&& other)
-        : value_(other.has_value() ? std::move(*other) : SentinelValue)
+        : value_(other.has_value() ? std::move(*other) : make_sentinel())
     {
         if (has_value()) {
             validate_not_sentinel();
@@ -154,12 +338,12 @@ public:
 
     // Assignment
     constexpr slim_optional& operator=(nullopt_t) noexcept(std::is_nothrow_copy_assignable_v<T>) {
-        value_ = SentinelValue;
+        value_ = make_sentinel();
         return *this;
     }
 
     constexpr slim_optional& operator=(std::nullopt_t) noexcept(std::is_nothrow_copy_assignable_v<T>) {
-        value_ = SentinelValue;
+        value_ = make_sentinel();
         return *this;
     }
 
@@ -184,7 +368,7 @@ public:
             value_ = *other;
             validate_not_sentinel();
         } else {
-            value_ = SentinelValue;
+            value_ = make_sentinel();
         }
         return *this;
     }
@@ -197,7 +381,7 @@ public:
             value_ = std::move(*other);
             validate_not_sentinel();
         } else {
-            value_ = SentinelValue;
+            value_ = make_sentinel();
         }
         return *this;
     }
@@ -211,7 +395,7 @@ public:
             value_ = *other;
             validate_not_sentinel();
         } else {
-            value_ = SentinelValue;
+            value_ = make_sentinel();
         }
         return *this;
     }
@@ -224,7 +408,7 @@ public:
             value_ = std::move(*other);
             validate_not_sentinel();
         } else {
-            value_ = SentinelValue;
+            value_ = make_sentinel();
         }
         return *this;
     }
@@ -239,7 +423,7 @@ public:
 
     // Observers
     constexpr bool has_value() const noexcept {
-        return value_ != SentinelValue;
+        return !check_is_sentinel();
     }
 
     constexpr explicit operator bool() const noexcept {
@@ -314,7 +498,7 @@ public:
 
     // Modifiers
     constexpr void reset() noexcept(std::is_nothrow_copy_assignable_v<T>) {
-        value_ = SentinelValue;
+        value_ = make_sentinel();
     }
 
     template<class... Args>

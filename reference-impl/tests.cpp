@@ -1,7 +1,14 @@
 #include "optional.hpp"
+#include <any>
+#include <coroutine>
 #include <iostream>
 #include <cassert>
+#include <cmath>
+#include <functional>
+#include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <optional>
 
@@ -495,6 +502,578 @@ TEST(vector_of_slim_optionals) {
 }
 
 // ============================================================================
+// auto_sentinel tests — scalar types
+// ============================================================================
+
+TEST(auto_sentinel_signed_int) {
+    slim_optional<int> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(int));
+
+    opt = 42;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 42);
+
+    opt = 0;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 0);
+
+    opt = -1;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == -1);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_signed_int_rejects_sentinel) {
+    // INT_MIN is the auto sentinel for signed int
+    ASSERT_THROWS((slim_optional<int>(std::numeric_limits<int>::min())), bad_optional_access);
+}
+
+TEST(auto_sentinel_unsigned_int) {
+    slim_optional<unsigned> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(unsigned));
+
+    opt = 0u;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 0u);
+
+    opt = 42u;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 42u);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_unsigned_rejects_sentinel) {
+    ASSERT_THROWS((slim_optional<unsigned>(std::numeric_limits<unsigned>::max())), bad_optional_access);
+}
+
+TEST(auto_sentinel_int8) {
+    slim_optional<int8_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(int8_t));
+
+    opt = int8_t{42};
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 42);
+}
+
+TEST(auto_sentinel_int16) {
+    slim_optional<int16_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(int16_t));
+
+    opt = int16_t{1000};
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 1000);
+}
+
+TEST(auto_sentinel_int64) {
+    slim_optional<int64_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(int64_t));
+
+    opt = int64_t{123456789LL};
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 123456789LL);
+}
+
+TEST(auto_sentinel_uint64) {
+    slim_optional<uint64_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(uint64_t));
+
+    opt = uint64_t{42};
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 42u);
+}
+
+TEST(auto_sentinel_size_t) {
+    slim_optional<std::size_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(std::size_t));
+
+    opt = std::size_t{100};
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 100u);
+}
+
+// ============================================================================
+// auto_sentinel tests — pointer types
+// ============================================================================
+
+TEST(auto_sentinel_pointer) {
+    slim_optional<int*> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(int*));
+
+    int x = 42;
+    opt = &x;
+    ASSERT(opt.has_value());
+    ASSERT(**opt == 42);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_pointer_rejects_nullptr) {
+    ASSERT_THROWS((slim_optional<int*>(nullptr)), bad_optional_access);
+}
+
+TEST(auto_sentinel_const_pointer) {
+    slim_optional<const char*> opt;
+    ASSERT(!opt.has_value());
+
+    opt = "hello";
+    ASSERT(opt.has_value());
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+// ============================================================================
+// auto_sentinel tests — floating point
+// ============================================================================
+
+TEST(auto_sentinel_float) {
+    slim_optional<float> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(float));
+
+    opt = 3.14f;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 3.14f);
+
+    opt = 0.0f;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 0.0f);
+
+    opt = -0.0f;
+    ASSERT(opt.has_value());
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_double) {
+    slim_optional<double> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(double));
+
+    opt = 2.718281828;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 2.718281828);
+
+    opt = 0.0;
+    ASSERT(opt.has_value());
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_float_rejects_nan) {
+    ASSERT_THROWS((slim_optional<float>(std::numeric_limits<float>::quiet_NaN())), bad_optional_access);
+}
+
+TEST(auto_sentinel_double_rejects_nan) {
+    ASSERT_THROWS((slim_optional<double>(std::numeric_limits<double>::quiet_NaN())), bad_optional_access);
+}
+
+TEST(auto_sentinel_long_double) {
+    slim_optional<long double> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(long double));
+
+    opt = 1.0L;
+    ASSERT(opt.has_value());
+    ASSERT(*opt == 1.0L);
+
+    opt = 0.0L;
+    ASSERT(opt.has_value());
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_long_double_rejects_nan) {
+    ASSERT_THROWS((slim_optional<long double>(std::numeric_limits<long double>::quiet_NaN())), bad_optional_access);
+}
+
+// ============================================================================
+// auto_sentinel tests — char16/32 types
+// ============================================================================
+
+TEST(auto_sentinel_char16) {
+    slim_optional<char16_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(char16_t));
+
+    opt = u'A';
+    ASSERT(opt.has_value());
+    ASSERT(*opt == u'A');
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_char32) {
+    slim_optional<char32_t> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(char32_t));
+
+    opt = U'\x1F600'; // emoji codepoint
+    ASSERT(opt.has_value());
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+// ============================================================================
+// auto_sentinel tests — standard library class types
+// ============================================================================
+
+TEST(auto_sentinel_unique_ptr) {
+    slim_optional<std::unique_ptr<int>> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(std::unique_ptr<int>));
+
+    opt = std::make_unique<int>(42);
+    ASSERT(opt.has_value());
+    ASSERT(**opt == 42);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_shared_ptr) {
+    slim_optional<std::shared_ptr<int>> opt;
+    ASSERT(!opt.has_value());
+
+    opt = std::make_shared<int>(99);
+    ASSERT(opt.has_value());
+    ASSERT(**opt == 99);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_string_view) {
+    slim_optional<std::string_view> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(std::string_view));
+
+    opt = std::string_view{"hello"};
+    ASSERT(opt.has_value());
+    ASSERT(*opt == "hello");
+
+    // Empty string (data != nullptr) is a valid value
+    opt = std::string_view{""};
+    ASSERT(opt.has_value());
+    ASSERT(opt->empty());
+    ASSERT(opt->data() != nullptr);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_span) {
+    slim_optional<std::span<int>> opt;
+    ASSERT(!opt.has_value());
+
+    int arr[] = {1, 2, 3};
+    opt = std::span<int>{arr};
+    ASSERT(opt.has_value());
+    ASSERT(opt->size() == 3);
+    ASSERT((*opt)[0] == 1);
+
+    // Empty span with non-null data is valid
+    opt = std::span<int>{arr, 0};
+    ASSERT(opt.has_value());
+    ASSERT(opt->empty());
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_function) {
+    slim_optional<std::function<int()>> opt;
+    ASSERT(!opt.has_value());
+
+    opt = std::function<int()>{[]{ return 42; }};
+    ASSERT(opt.has_value());
+    ASSERT((*opt)() == 42);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_move_only_function) {
+    slim_optional<std::move_only_function<int()>> opt;
+    ASSERT(!opt.has_value());
+
+    opt = std::move_only_function<int()>{[]{ return 99; }};
+    ASSERT(opt.has_value());
+    ASSERT((*opt)() == 99);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_weak_ptr) {
+    slim_optional<std::weak_ptr<int>> opt;
+    ASSERT(!opt.has_value());
+
+    auto sp = std::make_shared<int>(42);
+    opt = std::weak_ptr<int>{sp};
+    ASSERT(opt.has_value());
+    ASSERT(*opt->lock() == 42);
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_weak_ptr_expired_vs_empty) {
+    // A weak_ptr whose shared_ptr has died is expired but was assigned —
+    // the sentinel is a default-constructed weak_ptr (use_count == 0 && expired),
+    // not merely an expired one. However, once the shared_ptr dies the weak_ptr
+    // becomes indistinguishable from default-constructed in terms of observable state.
+    // This is an inherent limitation: weak_ptr has no "never assigned" flag.
+    slim_optional<std::weak_ptr<int>> opt;
+    {
+        auto sp = std::make_shared<int>(42);
+        opt = std::weak_ptr<int>{sp};
+        ASSERT(opt.has_value());
+    }
+    // sp is gone — weak_ptr is now expired, indistinguishable from sentinel
+    // This is expected: weak_ptr's sentinel is "expired + use_count==0"
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_coroutine_handle) {
+    slim_optional<std::coroutine_handle<>> opt;
+    ASSERT(!opt.has_value());
+    ASSERT(sizeof(opt) == sizeof(std::coroutine_handle<>));
+
+    // We can't easily create a real coroutine_handle in a test without
+    // a coroutine, but we can verify sentinel behavior
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+TEST(auto_sentinel_any) {
+    slim_optional<std::any> opt;
+    ASSERT(!opt.has_value());
+
+    opt = std::any{42};
+    ASSERT(opt.has_value());
+    ASSERT(std::any_cast<int>(*opt) == 42);
+
+    opt = std::any{std::string("hello")};
+    ASSERT(opt.has_value());
+    ASSERT(std::any_cast<std::string>(*opt) == "hello");
+
+    opt.reset();
+    ASSERT(!opt.has_value());
+}
+
+// ============================================================================
+// auto_sentinel sizeof tests
+// ============================================================================
+
+TEST(auto_sentinel_sizeof_comparisons) {
+    // All auto-sentinel types should be same size as the underlying type
+    ASSERT(sizeof(slim_optional<int>) == sizeof(int));
+    ASSERT(sizeof(slim_optional<unsigned>) == sizeof(unsigned));
+    ASSERT(sizeof(slim_optional<int64_t>) == sizeof(int64_t));
+    ASSERT(sizeof(slim_optional<float>) == sizeof(float));
+    ASSERT(sizeof(slim_optional<double>) == sizeof(double));
+    ASSERT(sizeof(slim_optional<int*>) == sizeof(int*));
+    ASSERT(sizeof(slim_optional<std::string_view>) == sizeof(std::string_view));
+    ASSERT(sizeof(slim_optional<std::unique_ptr<int>>) == sizeof(std::unique_ptr<int>));
+
+    // All should be smaller than std::optional
+    ASSERT(sizeof(slim_optional<int>) < sizeof(std::optional<int>));
+    ASSERT(sizeof(slim_optional<double>) < sizeof(std::optional<double>));
+    ASSERT(sizeof(slim_optional<int*>) < sizeof(std::optional<int*>));
+    ASSERT(sizeof(slim_optional<std::string_view>) < sizeof(std::optional<std::string_view>));
+
+    std::cout << "  sizeof(slim_optional<int>): " << sizeof(slim_optional<int>) << "\n";
+    std::cout << "  sizeof(std::optional<int>): " << sizeof(std::optional<int>) << "\n";
+    std::cout << "  sizeof(slim_optional<double>): " << sizeof(slim_optional<double>) << "\n";
+    std::cout << "  sizeof(std::optional<double>): " << sizeof(std::optional<double>) << "\n";
+    std::cout << "  sizeof(slim_optional<int*>): " << sizeof(slim_optional<int*>) << "\n";
+    std::cout << "  sizeof(std::optional<int*>): " << sizeof(std::optional<int*>) << "\n";
+    std::cout << "  sizeof(slim_optional<string_view>): " << sizeof(slim_optional<std::string_view>) << "\n";
+    std::cout << "  sizeof(std::optional<string_view>): " << sizeof(std::optional<std::string_view>) << "\n";
+    std::cout << "  sizeof(slim_optional<unique_ptr<int>>): " << sizeof(slim_optional<std::unique_ptr<int>>) << "\n";
+    std::cout << "  sizeof(std::optional<unique_ptr<int>>): " << sizeof(std::optional<std::unique_ptr<int>>) << "\n";
+}
+
+// ============================================================================
+// auto_sentinel constexpr tests
+// ============================================================================
+
+constexpr bool auto_sentinel_constexpr_test() {
+    slim_optional<int> i;
+    if (i.has_value()) return false;
+    i = 42;
+    if (*i != 42) return false;
+    i.reset();
+    if (i.has_value()) return false;
+
+    slim_optional<double> d;
+    if (d.has_value()) return false;
+    d = 3.14;
+    if (*d != 3.14) return false;
+
+    slim_optional<int*> p;
+    if (p.has_value()) return false;
+
+    return true;
+}
+
+TEST(auto_sentinel_constexpr) {
+    static_assert(auto_sentinel_constexpr_test());
+    ASSERT(auto_sentinel_constexpr_test());
+}
+
+// ============================================================================
+// auto_sentinel interop with explicit sentinel
+// ============================================================================
+
+TEST(auto_sentinel_interop_with_explicit) {
+    // auto sentinel int (INT_MIN) and explicit sentinel int (-1) can interop
+    slim_optional<int> auto_opt;
+    slim_optional<int, -1> explicit_opt;
+
+    ASSERT(!auto_opt.has_value());
+    ASSERT(!explicit_opt.has_value());
+    ASSERT(auto_opt == explicit_opt); // both empty
+
+    auto_opt = 42;
+    ASSERT(auto_opt != explicit_opt);
+
+    explicit_opt = 42;
+    ASSERT(auto_opt == explicit_opt);
+}
+
+// ============================================================================
+// sentinel_traits customization point tests
+// ============================================================================
+
+// A non-structural user type — cannot be an NTTP, but can use auto_sentinel
+// via sentinel_traits specialization.
+struct Color {
+    uint8_t r, g, b, a;
+    constexpr bool operator==(const Color&) const = default;
+};
+
+namespace std_proposal {
+template<>
+struct sentinel_traits<Color> {
+    static constexpr Color sentinel() noexcept { return {0, 0, 0, 0}; }
+    static constexpr bool is_sentinel(const Color& v) noexcept {
+        return v.r == 0 && v.g == 0 && v.b == 0 && v.a == 0;
+    }
+};
+}
+
+TEST(sentinel_traits_user_type_basic) {
+    // Color can use auto_sentinel thanks to sentinel_traits specialization
+    slim_optional<Color> c;
+    ASSERT(!c.has_value());
+
+    c = Color{255, 0, 0, 255};
+    ASSERT(c.has_value());
+    ASSERT(c->r == 255);
+    ASSERT(c->a == 255);
+
+    c.reset();
+    ASSERT(!c.has_value());
+
+    // Construct with value
+    slim_optional<Color> c2{Color{0, 128, 0, 255}};
+    ASSERT(c2.has_value());
+    ASSERT(c2->g == 128);
+
+    // value_or
+    slim_optional<Color> empty;
+    Color fallback{1, 1, 1, 1};
+    ASSERT(empty.value_or(fallback) == fallback);
+}
+
+TEST(sentinel_traits_user_type_rejects_sentinel) {
+    // Constructing with the sentinel value should throw
+    try {
+        slim_optional<Color> c{Color{0, 0, 0, 0}};
+        ASSERT(false); // should not reach
+    } catch (const std_proposal::bad_optional_access&) {
+        // expected
+    }
+}
+
+TEST(sentinel_traits_user_type_sizeof) {
+    // slim_optional<Color> should be same size as Color itself
+    ASSERT(sizeof(slim_optional<Color>) == sizeof(Color));
+    ASSERT(sizeof(std::optional<Color>) > sizeof(Color));
+}
+
+TEST(sentinel_traits_concept_check) {
+    // Types with sentinel_traits should satisfy the concept
+    static_assert(std_proposal::has_sentinel_traits<int>);
+    static_assert(std_proposal::has_sentinel_traits<float>);
+    static_assert(std_proposal::has_sentinel_traits<double>);
+    static_assert(std_proposal::has_sentinel_traits<int*>);
+    static_assert(std_proposal::has_sentinel_traits<std::string_view>);
+    static_assert(std_proposal::has_sentinel_traits<Color>);
+
+    // Types without sentinel_traits should not
+    struct Unregistered { int x; };
+    static_assert(!std_proposal::has_sentinel_traits<Unregistered>);
+    static_assert(!std_proposal::has_sentinel_traits<std::string>);
+}
+
+TEST(sentinel_traits_nullopt_construction) {
+    slim_optional<Color> c1(std_proposal::nullopt);
+    ASSERT(!c1.has_value());
+
+    slim_optional<Color> c2(std::nullopt);
+    ASSERT(!c2.has_value());
+}
+
+TEST(sentinel_traits_copy_move) {
+    slim_optional<Color> c1{Color{10, 20, 30, 40}};
+    slim_optional<Color> c2 = c1;  // copy
+    ASSERT(c2.has_value());
+    ASSERT(c2->r == 10);
+
+    slim_optional<Color> c3 = std::move(c1);  // move
+    ASSERT(c3.has_value());
+    ASSERT(c3->r == 10);
+
+    slim_optional<Color> empty;
+    slim_optional<Color> c4 = empty;  // copy empty
+    ASSERT(!c4.has_value());
+}
+
+TEST(sentinel_traits_std_optional_interop) {
+    // Convert to std::optional
+    slim_optional<Color> c{Color{1, 2, 3, 4}};
+    std::optional<Color> stdopt = c;
+    ASSERT(stdopt.has_value());
+    ASSERT(stdopt->r == 1);
+
+    // Empty conversion
+    slim_optional<Color> empty;
+    std::optional<Color> stdopt2 = empty;
+    ASSERT(!stdopt2.has_value());
+}
+
+// ============================================================================
 // Main test runner
 // ============================================================================
 
@@ -562,6 +1141,59 @@ int main() {
 
     std::cout << "\nContainer tests:\n";
     RUN_TEST(vector_of_slim_optionals);
+
+    std::cout << "\nauto_sentinel scalar tests:\n";
+    RUN_TEST(auto_sentinel_signed_int);
+    RUN_TEST(auto_sentinel_signed_int_rejects_sentinel);
+    RUN_TEST(auto_sentinel_unsigned_int);
+    RUN_TEST(auto_sentinel_unsigned_rejects_sentinel);
+    RUN_TEST(auto_sentinel_int8);
+    RUN_TEST(auto_sentinel_int16);
+    RUN_TEST(auto_sentinel_int64);
+    RUN_TEST(auto_sentinel_uint64);
+    RUN_TEST(auto_sentinel_size_t);
+
+    std::cout << "\nauto_sentinel pointer tests:\n";
+    RUN_TEST(auto_sentinel_pointer);
+    RUN_TEST(auto_sentinel_pointer_rejects_nullptr);
+    RUN_TEST(auto_sentinel_const_pointer);
+
+    std::cout << "\nauto_sentinel floating point tests:\n";
+    RUN_TEST(auto_sentinel_float);
+    RUN_TEST(auto_sentinel_double);
+    RUN_TEST(auto_sentinel_float_rejects_nan);
+    RUN_TEST(auto_sentinel_double_rejects_nan);
+    RUN_TEST(auto_sentinel_long_double);
+    RUN_TEST(auto_sentinel_long_double_rejects_nan);
+
+    std::cout << "\nauto_sentinel char16/32 tests:\n";
+    RUN_TEST(auto_sentinel_char16);
+    RUN_TEST(auto_sentinel_char32);
+
+    std::cout << "\nauto_sentinel standard library type tests:\n";
+    RUN_TEST(auto_sentinel_unique_ptr);
+    RUN_TEST(auto_sentinel_shared_ptr);
+    RUN_TEST(auto_sentinel_string_view);
+    RUN_TEST(auto_sentinel_span);
+    RUN_TEST(auto_sentinel_function);
+
+    std::cout << "\nauto_sentinel sizeof tests:\n";
+    RUN_TEST(auto_sentinel_sizeof_comparisons);
+
+    std::cout << "\nauto_sentinel constexpr tests:\n";
+    RUN_TEST(auto_sentinel_constexpr);
+
+    std::cout << "\nauto_sentinel interop tests:\n";
+    RUN_TEST(auto_sentinel_interop_with_explicit);
+
+    std::cout << "\nsentinel_traits customization tests:\n";
+    RUN_TEST(sentinel_traits_user_type_basic);
+    RUN_TEST(sentinel_traits_user_type_rejects_sentinel);
+    RUN_TEST(sentinel_traits_user_type_sizeof);
+    RUN_TEST(sentinel_traits_concept_check);
+    RUN_TEST(sentinel_traits_nullopt_construction);
+    RUN_TEST(sentinel_traits_copy_move);
+    RUN_TEST(sentinel_traits_std_optional_interop);
 
     std::cout << "\n======================================\n";
     std::cout << "All tests passed successfully!\n";
