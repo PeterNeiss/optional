@@ -1,4 +1,4 @@
-#include "../reference-impl/optional.hpp"
+#include <slim/optional.hpp>
 #include <iostream>
 #include <iomanip>
 #include <cstdint>
