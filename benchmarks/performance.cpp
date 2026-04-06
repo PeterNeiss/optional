@@ -74,7 +74,7 @@ int main() {
 
     benchmark("optional: default construction", [](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt;
+            optional<int*> opt;
             do_not_optimize(opt);
         }
     });
@@ -90,7 +90,7 @@ int main() {
 
     benchmark("optional: value construction", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt(&dummy);
+            optional<int*> opt(&dummy);
             do_not_optimize(opt);
         }
     });
@@ -106,9 +106,9 @@ int main() {
     });
 
     benchmark("optional: copy construction", [&](size_t n) {
-        optional<int*, nullptr> src(&dummy);
+        optional<int*> src(&dummy);
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt(src);
+            optional<int*> opt(src);
             do_not_optimize(opt);
         }
     });
@@ -131,7 +131,7 @@ int main() {
     });
 
     benchmark("optional: value assignment", [&](size_t n) {
-        optional<int*, nullptr> opt;
+        optional<int*> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = &dummy;
             do_not_optimize(opt);
@@ -149,7 +149,7 @@ int main() {
     });
 
     benchmark("optional: nullopt assignment", [](size_t n) {
-        optional<int*, nullptr> opt;
+        optional<int*> opt;
         for (size_t i = 0; i < n; ++i) {
             opt = nullopt;
             do_not_optimize(opt);
@@ -175,7 +175,7 @@ int main() {
     });
 
     benchmark("optional: has_value() check", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+        optional<int*> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = opt.has_value();
@@ -202,7 +202,7 @@ int main() {
     });
 
     benchmark("optional: operator* access", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+        optional<int*> opt(&dummy);
         volatile int* result;
         for (size_t i = 0; i < n; ++i) {
             result = *opt;
@@ -226,7 +226,7 @@ int main() {
     benchmark("optional: operator-> access", [&](size_t n) {
         struct S { int value; };
         S s{42};
-        optional<S*, nullptr> opt(&s);
+        optional<S*> opt(&s);
         volatile int result;
         for (size_t i = 0; i < n; ++i) {
             result = (*opt)->value;
@@ -254,8 +254,8 @@ int main() {
     });
 
     benchmark("optional: equality comparison", [&](size_t n) {
-        optional<int*, nullptr> opt1(&dummy);
-        optional<int*, nullptr> opt2(&dummy);
+        optional<int*> opt1(&dummy);
+        optional<int*> opt2(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt1 == opt2);
@@ -275,7 +275,7 @@ int main() {
     });
 
     benchmark("optional: nullopt comparison", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+        optional<int*> opt(&dummy);
         volatile bool result;
         for (size_t i = 0; i < n; ++i) {
             result = (opt == nullopt);
@@ -301,7 +301,7 @@ int main() {
     });
 
     benchmark("optional: transform", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+        optional<int*> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
             auto result = opt.transform([](int* p) { return p; });
             do_not_optimize(result);
@@ -319,9 +319,9 @@ int main() {
     });
 
     benchmark("optional: and_then", [&](size_t n) {
-        optional<int*, nullptr> opt(&dummy);
+        optional<int*> opt(&dummy);
         for (size_t i = 0; i < n; ++i) {
-            auto result = opt.and_then([](int* p) -> optional<int*, nullptr> { return p; });
+            auto result = opt.and_then([](int* p) -> optional<int*> { return p; });
             do_not_optimize(result);
         }
     });
@@ -351,7 +351,7 @@ int main() {
     }, container_size);
 
     benchmark("optional: vector iteration", [&](size_t n) {
-        std::vector<optional<int*, nullptr>> vec(container_size, &dummy);
+        std::vector<optional<int*>> vec(container_size, &dummy);
         for (size_t i = 0; i < n / container_size; ++i) {
             size_t sum = 0;
             for (const auto& opt : vec) {
@@ -387,7 +387,7 @@ int main() {
 
     benchmark("optional: mixed pattern", [&](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*, nullptr> opt(&dummy);  // Create
+            optional<int*> opt(&dummy);  // Create
             bool has = opt.has_value();                // Check
             if (has) {
                 int* val = *opt;                       // Access
@@ -427,7 +427,7 @@ int main() {
     }, cache_size);
 
     double slim_time = benchmark("optional: sequential sum", [&](size_t n) {
-        std::vector<optional<int, -1>> vec(cache_size);
+        std::vector<optional<int>> vec(cache_size);
         for (size_t i = 0; i < cache_size; ++i) {
             vec[i] = static_cast<int>(i);
         }

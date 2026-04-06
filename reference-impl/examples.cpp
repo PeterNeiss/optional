@@ -8,6 +8,57 @@
 using namespace slim;
 
 // ============================================================================
+// User types with sentinel_traits
+// ============================================================================
+
+enum class FileHandle : int32_t {
+    INVALID = -1,
+    STDIN = 0,
+    STDOUT = 1,
+    STDERR = 2
+};
+
+namespace slim {
+template<>
+struct sentinel_traits<FileHandle> {
+    static constexpr FileHandle sentinel() noexcept { return FileHandle::INVALID; }
+    static constexpr bool is_sentinel(const FileHandle& v) noexcept { return v == FileHandle::INVALID; }
+};
+}
+
+struct ResourceHandle {
+    int id;
+
+    constexpr bool operator==(const ResourceHandle&) const = default;
+    constexpr auto operator<=>(const ResourceHandle&) const = default;
+};
+
+namespace slim {
+template<>
+struct sentinel_traits<ResourceHandle> {
+    static constexpr ResourceHandle sentinel() noexcept { return {-1}; }
+    static constexpr bool is_sentinel(const ResourceHandle& v) noexcept { return v.id == -1; }
+};
+}
+
+struct Point {
+    int x, y;
+
+    constexpr Point(int x_, int y_) : x(x_), y(y_) {}
+
+    constexpr bool operator==(const Point&) const = default;
+    constexpr auto operator<=>(const Point&) const = default;
+};
+
+namespace slim {
+template<>
+struct sentinel_traits<Point> {
+    static constexpr Point sentinel() noexcept { return {-1, -1}; }
+    static constexpr bool is_sentinel(const Point& v) noexcept { return v.x == -1 && v.y == -1; }
+};
+}
+
+// ============================================================================
 // Example 1: Interop with std::optional
 // ============================================================================
 
@@ -19,15 +70,15 @@ void example_interop() {
     std::cout << "sizeof(std::optional<int*>): " << sizeof(std_opt) << " bytes\n";
 
     // optional - sentinel-based, no bool
-    optional<int*, nullptr> slim_opt;
-    std::cout << "sizeof(optional<int*, nullptr>): " << sizeof(slim_opt) << " bytes\n";
+    optional<int*> slim_opt;
+    std::cout << "sizeof(optional<int*>): " << sizeof(slim_opt) << " bytes\n";
 
     int value = 42;
     std_opt = &value;
     slim_opt = &value;
 
     // Convert between them
-    optional<int*, nullptr> from_std(std_opt);
+    optional<int*> from_std(std_opt);
     std::optional<int*> from_slim = slim_opt;
 
     std::cout << "from_std: " << **from_std << "\n";
@@ -44,8 +95,8 @@ void example_interop() {
 void example_sentinel_pointers() {
     std::cout << "=== Example 2: Sentinel-Based Pointers ===\n";
 
-    optional<int*, nullptr> ptr_opt;
-    std::cout << "sizeof(optional<int*, nullptr>): " << sizeof(ptr_opt) << " bytes\n";
+    optional<int*> ptr_opt;
+    std::cout << "sizeof(optional<int*>): " << sizeof(ptr_opt) << " bytes\n";
 
     int value = 42;
     ptr_opt = &value;
@@ -58,37 +109,30 @@ void example_sentinel_pointers() {
     std::cout << "After reset, has_value: " << ptr_opt.has_value() << "\n";
 
     // Container of optional pointers
-    std::vector<optional<int*, nullptr>> pointers;
+    std::vector<optional<int*>> pointers;
     pointers.push_back(&value);
     pointers.push_back(nullopt);
     pointers.push_back(&value);
 
     std::cout << "Container size (3 elements): "
-              << pointers.size() * sizeof(optional<int*, nullptr>)
+              << pointers.size() * sizeof(optional<int*>)
               << " bytes\n\n";
 }
 
 // ============================================================================
-// Example 3: Enums with invalid values
+// Example 3: Enums via sentinel_traits
 // ============================================================================
 
-enum class FileHandle : int32_t {
-    INVALID = -1,
-    STDIN = 0,
-    STDOUT = 1,
-    STDERR = 2
-};
-
 void example_enum_sentinel() {
-    std::cout << "=== Example 3: Enum with Sentinel ===\n";
+    std::cout << "=== Example 3: Enum with sentinel_traits ===\n";
 
     // std::optional - 8 bytes (bool + int32_t + padding)
     std::optional<FileHandle> handle1;
     std::cout << "sizeof(std::optional<FileHandle>): " << sizeof(handle1) << " bytes\n";
 
     // optional - 4 bytes (just the enum!)
-    optional<FileHandle, FileHandle::INVALID> handle2;
-    std::cout << "sizeof(optional<FileHandle, INVALID>): " << sizeof(handle2) << " bytes\n";
+    optional<FileHandle> handle2;
+    std::cout << "sizeof(optional<FileHandle>): " << sizeof(handle2) << " bytes\n";
 
     handle2 = FileHandle::STDOUT;
     if (handle2) {
@@ -103,11 +147,11 @@ void example_enum_sentinel() {
 // Example 4: Constexpr usage
 // ============================================================================
 
-constexpr optional<int, -1> make_slim_int() {
+constexpr optional<int> make_slim_int() {
     return 42;
 }
 
-constexpr optional<int, -1> make_empty_int() {
+constexpr optional<int> make_empty_int() {
     return nullopt;
 }
 
@@ -123,7 +167,7 @@ void example_constexpr() {
 
     // Also test with pointers (runtime)
     int value = 99;
-    optional<int*, nullptr> ptr_opt(&value);
+    optional<int*> ptr_opt(&value);
     std::cout << "Runtime pointer optional: " << **ptr_opt << "\n\n";
 }
 
@@ -135,7 +179,7 @@ void example_comparison_with_std() {
     std::cout << "=== Example 5: Comparison with std::optional ===\n";
 
     std::optional<int*> std_style;
-    optional<int*, nullptr> slim_style;
+    optional<int*> slim_style;
 
     // Both empty - equal
     std::cout << "Both empty: " << (slim_style == std_style) << "\n";
@@ -158,7 +202,7 @@ void example_comparison_with_std() {
 void example_safety() {
     std::cout << "=== Example 6: Safety (Sentinel Protection) ===\n";
 
-    optional<int*, nullptr> opt;
+    optional<int*> opt;
 
     try {
         // This will throw - can't construct with sentinel value!
@@ -186,7 +230,7 @@ void example_safety() {
 void example_value_semantics() {
     std::cout << "=== Example 7: Value Semantics ===\n";
 
-    optional<int*, nullptr> opt1;
+    optional<int*> opt1;
     int x = 100;
     opt1 = &x;
 
@@ -201,7 +245,7 @@ void example_value_semantics() {
     std::cout << "After move, opt1 still valid: " << opt1.has_value() << "\n";
 
     // Swap
-    optional<int*, nullptr> opt4;
+    optional<int*> opt4;
     opt3.swap(opt4);
     std::cout << "After swap, opt3 has_value: " << opt3.has_value() << "\n";
     std::cout << "After swap, opt4 has_value: " << opt4.has_value() << "\n\n";
@@ -214,7 +258,7 @@ void example_value_semantics() {
 void example_monadic() {
     std::cout << "=== Example 8: Monadic Operations ===\n";
 
-    optional<int*, nullptr> opt;
+    optional<int*> opt;
     int x = 42;
     opt = &x;
 
@@ -223,7 +267,7 @@ void example_monadic() {
     std::cout << "Transformed value: " << *doubled << "\n";
 
     // and_then
-    auto result = opt.and_then([](int* p) -> optional<int, -1> {
+    auto result = opt.and_then([](int* p) -> optional<int> {
         if (*p > 0) {
             return *p;
         } else {
@@ -236,8 +280,8 @@ void example_monadic() {
     }
 
     // or_else
-    optional<int*, nullptr> empty_opt;
-    auto fallback = empty_opt.or_else([]() -> optional<int*, nullptr> {
+    optional<int*> empty_opt;
+    auto fallback = empty_opt.or_else([]() -> optional<int*> {
         static int default_val = 99;
         return &default_val;
     });
@@ -251,7 +295,7 @@ void example_monadic() {
 void example_value_or() {
     std::cout << "=== Example 9: value_or ===\n";
 
-    optional<int*, nullptr> opt;
+    optional<int*> opt;
     int default_val = 999;
 
     int* result = opt.value_or(&default_val);
@@ -264,49 +308,14 @@ void example_value_or() {
 }
 
 // ============================================================================
-// Example 10: Integer with sentinel value
+// Example 10: Custom types via sentinel_traits
 // ============================================================================
-
-void example_integer_sentinel() {
-    std::cout << "=== Example 10: Integer with Sentinel ===\n";
-
-    // Using -1 as sentinel for unsigned indices
-    optional<size_t, static_cast<size_t>(-1)> index_opt;
-    std::cout << "sizeof(optional<size_t, -1>): " << sizeof(index_opt) << " bytes\n";
-
-    index_opt = 42;
-    std::cout << "Index: " << *index_opt << "\n";
-
-    try {
-        // Can't set to sentinel value
-        index_opt = static_cast<size_t>(-1);
-        std::cout << "ERROR: Should have thrown!\n";
-    } catch (const bad_optional_access& e) {
-        std::cout << "Caught expected exception\n";
-    }
-
-    index_opt.reset();
-    std::cout << "After reset, has_value: " << index_opt.has_value() << "\n\n";
-}
-
-// ============================================================================
-// Example 11: Custom type with sentinel
-// ============================================================================
-
-struct ResourceHandle {
-    int id;
-
-    constexpr bool operator==(const ResourceHandle&) const = default;
-    constexpr auto operator<=>(const ResourceHandle&) const = default;
-};
-
-constexpr ResourceHandle INVALID_HANDLE{-1};
 
 void example_custom_type() {
-    std::cout << "=== Example 11: Custom Type with Sentinel ===\n";
+    std::cout << "=== Example 10: Custom Type via sentinel_traits ===\n";
 
-    optional<ResourceHandle, INVALID_HANDLE> handle;
-    std::cout << "sizeof(optional<ResourceHandle, INVALID>): " << sizeof(handle) << " bytes\n";
+    optional<ResourceHandle> handle;
+    std::cout << "sizeof(optional<ResourceHandle>): " << sizeof(handle) << " bytes\n";
 
     handle = ResourceHandle{42};
     std::cout << "Handle ID: " << handle->id << "\n";
@@ -316,44 +325,33 @@ void example_custom_type() {
 }
 
 // ============================================================================
-// Example 12: In-place construction
+// Example 11: In-place construction
 // ============================================================================
 
-struct Point {
-    int x, y;
-
-    constexpr Point(int x_, int y_) : x(x_), y(y_) {}
-
-    constexpr bool operator==(const Point&) const = default;
-    constexpr auto operator<=>(const Point&) const = default;
-};
-
-constexpr Point INVALID_POINT{-1, -1};
-
 void example_in_place() {
-    std::cout << "=== Example 12: In-Place Construction ===\n";
+    std::cout << "=== Example 11: In-Place Construction ===\n";
 
-    optional<Point, INVALID_POINT> point_opt;
+    optional<Point> point_opt;
 
     point_opt.emplace(10, 20);
     std::cout << "Point: (" << point_opt->x << ", " << point_opt->y << ")\n";
 
-    optional<Point, INVALID_POINT> point_opt2(in_place, 5, 15);
+    optional<Point> point_opt2(in_place, 5, 15);
     std::cout << "Point2: (" << point_opt2->x << ", " << point_opt2->y << ")\n\n";
 }
 
 // ============================================================================
-// Example 13: Make optional
+// Example 12: Make optional
 // ============================================================================
 
 void example_make_optional() {
-    std::cout << "=== Example 13: make_optional ===\n";
+    std::cout << "=== Example 12: make_optional ===\n";
 
     int x = 42;
-    auto opt = make_optional<int*, nullptr>(&x);
+    auto opt = make_optional(&x);
     std::cout << "make_optional value: " << **opt << "\n";
 
-    auto opt2 = make_optional<Point, INVALID_POINT>(3, 4);
+    auto opt2 = make_optional<Point>(3, 4);
     std::cout << "make_optional Point: (" << opt2->x << ", " << opt2->y << ")\n\n";
 }
 
@@ -362,7 +360,7 @@ void example_make_optional() {
 // ============================================================================
 
 int main() {
-    std::cout << "C++ optional Examples\n";
+    std::cout << "slim::optional Examples\n";
     std::cout << "====================================\n\n";
 
     example_interop();
@@ -374,7 +372,6 @@ int main() {
     example_value_semantics();
     example_monadic();
     example_value_or();
-    example_integer_sentinel();
     example_custom_type();
     example_in_place();
     example_make_optional();
