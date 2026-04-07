@@ -450,6 +450,141 @@ int main() {
     std::cout << "\n\n";
 
     // ========================================================================
+    // Never-empty (sentinel_traits<void>) benchmarks
+    // ========================================================================
+
+    std::cout << "Never-empty optional (sentinel_traits<void>) Performance\n";
+    std::cout << std::string(77, '-') << "\n";
+
+    using NeverEmpty = optional<int, sentinel_traits<void>>;
+
+    benchmark("std::optional<int>: value construction", [](size_t n) {
+        for (size_t i = 0; i < n; ++i) {
+            std::optional<int> opt(static_cast<int>(i));
+            do_not_optimize(opt);
+        }
+    });
+
+    benchmark("optional<int>: value construction", [](size_t n) {
+        for (size_t i = 0; i < n; ++i) {
+            optional<int> opt(static_cast<int>(i));
+            do_not_optimize(opt);
+        }
+    });
+
+    benchmark("never-empty<int>: value construction", [](size_t n) {
+        for (size_t i = 0; i < n; ++i) {
+            NeverEmpty opt(static_cast<int>(i));
+            do_not_optimize(opt);
+        }
+    });
+
+    std::cout << "\n";
+
+    benchmark("std::optional<int>: has_value() check", [](size_t n) {
+        std::optional<int> opt(42);
+        volatile bool result;
+        for (size_t i = 0; i < n; ++i) {
+            result = opt.has_value();
+            do_not_optimize(result);
+        }
+    });
+
+    benchmark("optional<int>: has_value() check", [](size_t n) {
+        optional<int> opt(42);
+        volatile bool result;
+        for (size_t i = 0; i < n; ++i) {
+            result = opt.has_value();
+            do_not_optimize(result);
+        }
+    });
+
+    benchmark("never-empty<int>: has_value() check", [](size_t n) {
+        NeverEmpty opt(42);
+        volatile bool result;
+        for (size_t i = 0; i < n; ++i) {
+            result = opt.has_value();
+            do_not_optimize(result);
+        }
+    });
+
+    std::cout << "\n";
+
+    benchmark("std::optional<int>: operator* access", [](size_t n) {
+        std::optional<int> opt(42);
+        volatile int result;
+        for (size_t i = 0; i < n; ++i) {
+            result = *opt;
+            do_not_optimize(result);
+        }
+    });
+
+    benchmark("optional<int>: operator* access", [](size_t n) {
+        optional<int> opt(42);
+        volatile int result;
+        for (size_t i = 0; i < n; ++i) {
+            result = *opt;
+            do_not_optimize(result);
+        }
+    });
+
+    benchmark("never-empty<int>: operator* access", [](size_t n) {
+        NeverEmpty opt(42);
+        volatile int result;
+        for (size_t i = 0; i < n; ++i) {
+            result = *opt;
+            do_not_optimize(result);
+        }
+    });
+
+    std::cout << "\n";
+
+    // Container iteration: the never-empty variant has sizeof(int), so it
+    // fits twice as many items per cache line as std::optional<int>.
+    {
+        const size_t iter_size = 100000;
+
+        benchmark("std::optional<int>: sequential sum", [&](size_t n) {
+            std::vector<std::optional<int>> vec(iter_size);
+            for (size_t i = 0; i < iter_size; ++i) vec[i] = static_cast<int>(i);
+            for (size_t iter = 0; iter < n / iter_size; ++iter) {
+                long long sum = 0;
+                for (size_t i = 0; i < iter_size; ++i) {
+                    if (vec[i].has_value()) sum += *vec[i];
+                }
+                do_not_optimize(sum);
+            }
+        }, iter_size);
+
+        benchmark("optional<int>: sequential sum", [&](size_t n) {
+            std::vector<optional<int>> vec(iter_size);
+            for (size_t i = 0; i < iter_size; ++i) vec[i] = static_cast<int>(i);
+            for (size_t iter = 0; iter < n / iter_size; ++iter) {
+                long long sum = 0;
+                for (size_t i = 0; i < iter_size; ++i) {
+                    if (vec[i].has_value()) sum += *vec[i];
+                }
+                do_not_optimize(sum);
+            }
+        }, iter_size);
+
+        benchmark("never-empty<int>: sequential sum", [&](size_t n) {
+            std::vector<NeverEmpty> vec;
+            vec.reserve(iter_size);
+            for (size_t i = 0; i < iter_size; ++i) vec.emplace_back(static_cast<int>(i));
+            for (size_t iter = 0; iter < n / iter_size; ++iter) {
+                long long sum = 0;
+                for (size_t i = 0; i < iter_size; ++i) {
+                    if (vec[i].has_value()) sum += *vec[i];
+                }
+                do_not_optimize(sum);
+            }
+        }, iter_size);
+    }
+
+    std::cout << "\n\n";
+
+    // ========================================================================
     // Summary
     // ========================================================================
 

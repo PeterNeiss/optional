@@ -1171,6 +1171,30 @@ TEST(sentinel_traits_std_optional_interop) {
     ASSERT(!stdopt2.has_value());
 }
 
+TEST(void_traits_no_overhead) {
+    using Opt = slim::optional<int, slim::sentinel_traits<void>>;
+    static_assert(sizeof(Opt) == sizeof(int));
+    static_assert(alignof(Opt) == alignof(int));
+    static_assert(sizeof(Opt) < sizeof(std::optional<int>));
+
+    Opt o{42};
+    ASSERT(o.has_value());
+    ASSERT(*o == 42);
+    *o = 7;
+    ASSERT(*o == 7);
+
+    // Works for types with no natural sentinel (e.g. std::string).
+    using OptStr = slim::optional<std::string, slim::sentinel_traits<void>>;
+    static_assert(sizeof(OptStr) == sizeof(std::string));
+    OptStr s{std::string{"hi"}};
+    ASSERT(s.has_value() && *s == "hi");
+
+    // Empty-state operations must be ill-formed for the never-empty variant.
+    static_assert(!std::is_default_constructible_v<Opt>);
+    static_assert(!std::is_assignable_v<Opt&, slim::nullopt_t>);
+    static_assert(!std::is_constructible_v<Opt, slim::nullopt_t>);
+}
+
 // ============================================================================
 // Main test runner
 // ============================================================================
@@ -1307,6 +1331,7 @@ int main() {
     RUN_TEST(sentinel_traits_nullopt_construction);
     RUN_TEST(sentinel_traits_copy_move);
     RUN_TEST(sentinel_traits_std_optional_interop);
+    RUN_TEST(void_traits_no_overhead);
 
     std::cout << "\n======================================\n";
     std::cout << "All tests passed successfully!\n";

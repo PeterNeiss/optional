@@ -256,5 +256,54 @@ int main() {
     std::cout << "  total:          " << sizeof(optional<int32_t>) << " bytes\n";
     std::cout << "  padding:        0 bytes (no overhead!)\n\n";
 
+    std::cout << "\n";
+    std::cout << "Never-empty Variant (sentinel_traits<void>)\n";
+    std::cout << "===========================================\n\n";
+    std::cout << "For types with no natural sentinel, slim::optional<T, sentinel_traits<void>>\n";
+    std::cout << "collapses to sizeof(T) — no bool flag, no padding.\n\n";
+
+    std::cout << std::left << std::setw(40) << "Type"
+              << std::right << std::setw(12) << "std::optional"
+              << std::setw(12) << "never-empty"
+              << std::setw(12) << "Savings\n";
+    std::cout << std::string(76, '-') << "\n";
+
+    print_row("optional<int>",
+              sizeof(std::optional<int>),
+              sizeof(optional<int, sentinel_traits<void>>));
+
+    print_row("optional<int64_t>",
+              sizeof(std::optional<int64_t>),
+              sizeof(optional<int64_t, sentinel_traits<void>>));
+
+    struct Point { int x, y; };
+    print_row("optional<Point{int,int}>",
+              sizeof(std::optional<Point>),
+              sizeof(optional<Point, sentinel_traits<void>>));
+
+    struct Big { int64_t a, b, c; };
+    print_row("optional<Big{3x int64_t}>",
+              sizeof(std::optional<Big>),
+              sizeof(optional<Big, sentinel_traits<void>>));
+
+    print_row("optional<std::string>",
+              sizeof(std::optional<std::string>),
+              sizeof(optional<std::string, sentinel_traits<void>>));
+
+    std::cout << "\n";
+    std::cout << "sizeof equal to T (zero overhead versus a plain T):\n";
+    std::cout << "  sizeof(int)                                   = "
+              << sizeof(int) << "\n";
+    std::cout << "  sizeof(slim::optional<int, void-traits>)      = "
+              << sizeof(optional<int, sentinel_traits<void>>) << "\n";
+    std::cout << "  sizeof(Point)                                 = "
+              << sizeof(Point) << "\n";
+    std::cout << "  sizeof(slim::optional<Point, void-traits>)    = "
+              << sizeof(optional<Point, sentinel_traits<void>>) << "\n";
+    std::cout << "  sizeof(std::string)                           = "
+              << sizeof(std::string) << "\n";
+    std::cout << "  sizeof(slim::optional<string, void-traits>)   = "
+              << sizeof(optional<std::string, sentinel_traits<void>>) << "\n\n";
+
     return 0;
 }

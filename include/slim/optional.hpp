@@ -73,6 +73,19 @@ concept has_sentinel_traits = requires(const T& v) {
     { sentinel_traits<T>::is_sentinel(v) } -> std::same_as<bool>;
 };
 
+// Escape-hatch specialization: a "never-empty" traits. When used as the
+// Traits parameter of slim::optional, is_sentinel is always false, so the
+// optional always reports has_value()==true and collapses to sizeof(T).
+template<>
+struct sentinel_traits<void> {
+    template<class U>
+    static constexpr bool is_sentinel(const U&) noexcept { return false; }
+};
+
+template<class T, class Traits>
+concept valid_optional_traits =
+    std::same_as<Traits, sentinel_traits<void>> || has_sentinel_traits<T>;
+
 // ── Scalar specializations ──
 
 // Signed integers (excluding bool)
@@ -262,40 +275,45 @@ struct sentinel_traits<std::exception_ptr> {
 // optional: sentinel-based optional with no bool flag
 // ============================================================================
 
-template<class T>
-    requires has_sentinel_traits<T>
+template<class T, class Traits = sentinel_traits<T>>
+    requires valid_optional_traits<T, Traits>
 class optional;
 
 // Helper trait to detect optional types (slim or std)
 namespace detail {
 template<class> inline constexpr bool is_optional_v = false;
-template<class T> inline constexpr bool is_optional_v<optional<T>> = true;
+template<class T, class Tr> inline constexpr bool is_optional_v<optional<T, Tr>> = true;
 template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
 }
 
-template<class T>
-    requires has_sentinel_traits<T>
+template<class T, class Traits>
+    requires valid_optional_traits<T, Traits>
 class optional {
+    static constexpr bool never_empty_ = std::same_as<Traits, sentinel_traits<void>>;
     T value_;
 
     static constexpr void validate_not_sentinel(const T& v) {
-        if (sentinel_traits<T>::is_sentinel(v)) {
+        if (Traits::is_sentinel(v)) {
             throw bad_optional_access("Cannot construct optional with sentinel value");
         }
     }
 
 public:
     using value_type = T;
+    using traits_type = Traits;
 
     // Constructors
-    constexpr optional() noexcept(noexcept(T(sentinel_traits<T>::sentinel())))
-        : value_(sentinel_traits<T>::sentinel()) {}
+    constexpr optional() noexcept(noexcept(T(Traits::sentinel())))
+        requires (!never_empty_)
+        : value_(Traits::sentinel()) {}
 
-    constexpr optional(nullopt_t) noexcept(noexcept(T(sentinel_traits<T>::sentinel())))
-        : value_(sentinel_traits<T>::sentinel()) {}
+    constexpr optional(nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
+        requires (!never_empty_)
+        : value_(Traits::sentinel()) {}
 
-    constexpr optional(std::nullopt_t) noexcept(noexcept(T(sentinel_traits<T>::sentinel())))
-        : value_(sentinel_traits<T>::sentinel()) {}
+    constexpr optional(std::nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
+        requires (!never_empty_)
+        : value_(Traits::sentinel()) {}
 
     constexpr optional(const optional& other) = default;
     constexpr optional(optional&& other) noexcept(std::is_nothrow_move_constructible_v<T>) = default;
@@ -332,10 +350,10 @@ public:
 
     // Construct from another optional with different T
     template<class U>
-        requires std::is_constructible_v<T, const U&>
+        requires (!never_empty_ && std::is_constructible_v<T, const U&>)
     constexpr explicit(!std::is_convertible_v<const U&, T>)
     optional(const optional<U>& other)
-        : value_(other.has_value() ? *other : sentinel_traits<T>::sentinel())
+        : value_(other.has_value() ? *other : Traits::sentinel())
     {
         if (has_value()) {
             validate_not_sentinel(value_);
@@ -343,10 +361,10 @@ public:
     }
 
     template<class U>
-        requires std::is_constructible_v<T, U&&>
+        requires (!never_empty_ && std::is_constructible_v<T, U&&>)
     constexpr explicit(!std::is_convertible_v<U&&, T>)
     optional(optional<U>&& other)
-        : value_(other.has_value() ? std::move(*other) : sentinel_traits<T>::sentinel())
+        : value_(other.has_value() ? std::move(*other) : Traits::sentinel())
     {
         if (has_value()) {
             validate_not_sentinel(value_);
@@ -355,10 +373,10 @@ public:
 
     // Construct from std::optional
     template<class U = T>
-        requires std::is_constructible_v<T, const U&>
+        requires (!never_empty_ && std::is_constructible_v<T, const U&>)
     constexpr explicit(!std::is_convertible_v<const U&, T>)
     optional(const std::optional<U>& other)
-        : value_(other.has_value() ? *other : sentinel_traits<T>::sentinel())
+        : value_(other.has_value() ? *other : Traits::sentinel())
     {
         if (has_value()) {
             validate_not_sentinel(value_);
@@ -366,10 +384,10 @@ public:
     }
 
     template<class U = T>
-        requires std::is_constructible_v<T, U&&>
+        requires (!never_empty_ && std::is_constructible_v<T, U&&>)
     constexpr explicit(!std::is_convertible_v<U&&, T>)
     optional(std::optional<U>&& other)
-        : value_(other.has_value() ? std::move(*other) : sentinel_traits<T>::sentinel())
+        : value_(other.has_value() ? std::move(*other) : Traits::sentinel())
     {
         if (has_value()) {
             validate_not_sentinel(value_);
@@ -379,13 +397,17 @@ public:
     constexpr ~optional() = default;
 
     // Assignment
-    constexpr optional& operator=(nullopt_t) noexcept(noexcept(std::declval<T&>() = sentinel_traits<T>::sentinel())) {
-        value_ = sentinel_traits<T>::sentinel();
+    constexpr optional& operator=(nullopt_t) noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
+        requires (!never_empty_)
+    {
+        value_ = Traits::sentinel();
         return *this;
     }
 
-    constexpr optional& operator=(std::nullopt_t) noexcept(noexcept(std::declval<T&>() = sentinel_traits<T>::sentinel())) {
-        value_ = sentinel_traits<T>::sentinel();
+    constexpr optional& operator=(std::nullopt_t) noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
+        requires (!never_empty_)
+    {
+        value_ = Traits::sentinel();
         return *this;
     }
 
@@ -403,54 +425,54 @@ public:
     }
 
     template<class U>
-        requires std::is_constructible_v<T, const U&> &&
-                 std::is_assignable_v<T&, const U&>
+        requires (!never_empty_ && std::is_constructible_v<T, const U&> &&
+                  std::is_assignable_v<T&, const U&>)
     constexpr optional& operator=(const optional<U>& other) {
         if (other.has_value()) {
             value_ = *other;
             validate_not_sentinel(value_);
         } else {
-            value_ = sentinel_traits<T>::sentinel();
+            value_ = Traits::sentinel();
         }
         return *this;
     }
 
     template<class U>
-        requires std::is_constructible_v<T, U> &&
-                 std::is_assignable_v<T&, U>
+        requires (!never_empty_ && std::is_constructible_v<T, U> &&
+                  std::is_assignable_v<T&, U>)
     constexpr optional& operator=(optional<U>&& other) {
         if (other.has_value()) {
             value_ = std::move(*other);
             validate_not_sentinel(value_);
         } else {
-            value_ = sentinel_traits<T>::sentinel();
+            value_ = Traits::sentinel();
         }
         return *this;
     }
 
     // Assign from std::optional
     template<class U = T>
-        requires std::is_constructible_v<T, const U&> &&
-                 std::is_assignable_v<T&, const U&>
+        requires (!never_empty_ && std::is_constructible_v<T, const U&> &&
+                  std::is_assignable_v<T&, const U&>)
     constexpr optional& operator=(const std::optional<U>& other) {
         if (other.has_value()) {
             value_ = *other;
             validate_not_sentinel(value_);
         } else {
-            value_ = sentinel_traits<T>::sentinel();
+            value_ = Traits::sentinel();
         }
         return *this;
     }
 
     template<class U = T>
-        requires std::is_constructible_v<T, U> &&
-                 std::is_assignable_v<T&, U>
+        requires (!never_empty_ && std::is_constructible_v<T, U> &&
+                  std::is_assignable_v<T&, U>)
     constexpr optional& operator=(std::optional<U>&& other) {
         if (other.has_value()) {
             value_ = std::move(*other);
             validate_not_sentinel(value_);
         } else {
-            value_ = sentinel_traits<T>::sentinel();
+            value_ = Traits::sentinel();
         }
         return *this;
     }
@@ -465,7 +487,7 @@ public:
 
     // Observers
     constexpr bool has_value() const noexcept {
-        return !sentinel_traits<T>::is_sentinel(value_);
+        return !Traits::is_sentinel(value_);
     }
 
     constexpr explicit operator bool() const noexcept {
@@ -539,8 +561,10 @@ public:
     }
 
     // Modifiers
-    constexpr void reset() noexcept(noexcept(std::declval<T&>() = sentinel_traits<T>::sentinel())) {
-        value_ = sentinel_traits<T>::sentinel();
+    constexpr void reset() noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
+        requires (!never_empty_)
+    {
+        value_ = Traits::sentinel();
     }
 
     template<class... Args>
@@ -701,8 +725,8 @@ public:
 // Comparison operators — optional vs optional
 // ============================================================================
 
-template<class T>
-constexpr bool operator==(const optional<T>& lhs, const optional<T>& rhs) {
+template<class T, class Tr>
+constexpr bool operator==(const optional<T, Tr>& lhs, const optional<T, Tr>& rhs) {
     if (lhs.has_value() != rhs.has_value()) {
         return false;
     }
@@ -712,8 +736,8 @@ constexpr bool operator==(const optional<T>& lhs, const optional<T>& rhs) {
     return *lhs == *rhs;
 }
 
-template<class T>
-constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T>& lhs, const optional<T>& rhs)
+template<class T, class Tr>
+constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T, Tr>& lhs, const optional<T, Tr>& rhs)
     requires std::three_way_comparable<T>
 {
     if (lhs.has_value() && rhs.has_value()) {
@@ -726,8 +750,8 @@ constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T>& lhs,
 // Comparison operators — optional vs std::optional
 // ============================================================================
 
-template<class T>
-constexpr bool operator==(const optional<T>& lhs, const std::optional<T>& rhs) {
+template<class T, class Tr>
+constexpr bool operator==(const optional<T, Tr>& lhs, const std::optional<T>& rhs) {
     if (lhs.has_value() != rhs.has_value()) {
         return false;
     }
@@ -737,13 +761,13 @@ constexpr bool operator==(const optional<T>& lhs, const std::optional<T>& rhs) {
     return *lhs == *rhs;
 }
 
-template<class T>
-constexpr bool operator==(const std::optional<T>& lhs, const optional<T>& rhs) {
+template<class T, class Tr>
+constexpr bool operator==(const std::optional<T>& lhs, const optional<T, Tr>& rhs) {
     return rhs == lhs;
 }
 
-template<class T>
-constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T>& lhs, const std::optional<T>& rhs)
+template<class T, class Tr>
+constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T, Tr>& lhs, const std::optional<T>& rhs)
     requires std::three_way_comparable<T>
 {
     if (lhs.has_value() && rhs.has_value()) {
@@ -756,23 +780,23 @@ constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T>& lhs,
 // Comparison with nullopt
 // ============================================================================
 
-template<class T>
-constexpr bool operator==(const optional<T>& opt, nullopt_t) noexcept {
+template<class T, class Tr>
+constexpr bool operator==(const optional<T, Tr>& opt, nullopt_t) noexcept {
     return !opt.has_value();
 }
 
-template<class T>
-constexpr bool operator==(const optional<T>& opt, std::nullopt_t) noexcept {
+template<class T, class Tr>
+constexpr bool operator==(const optional<T, Tr>& opt, std::nullopt_t) noexcept {
     return !opt.has_value();
 }
 
-template<class T>
-constexpr std::strong_ordering operator<=>(const optional<T>& opt, nullopt_t) noexcept {
+template<class T, class Tr>
+constexpr std::strong_ordering operator<=>(const optional<T, Tr>& opt, nullopt_t) noexcept {
     return opt.has_value() <=> false;
 }
 
-template<class T>
-constexpr std::strong_ordering operator<=>(const optional<T>& opt, std::nullopt_t) noexcept {
+template<class T, class Tr>
+constexpr std::strong_ordering operator<=>(const optional<T, Tr>& opt, std::nullopt_t) noexcept {
     return opt.has_value() <=> false;
 }
 
@@ -780,20 +804,20 @@ constexpr std::strong_ordering operator<=>(const optional<T>& opt, std::nullopt_
 // Comparison with T
 // ============================================================================
 
-template<class T, class U>
+template<class T, class Tr, class U>
     requires (!detail::is_optional_v<std::remove_cvref_t<U>> &&
               !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
               !std::same_as<std::remove_cvref_t<U>, std::nullopt_t>)
-constexpr bool operator==(const optional<T>& opt, const U& value) {
+constexpr bool operator==(const optional<T, Tr>& opt, const U& value) {
     return opt.has_value() && (*opt == value);
 }
 
-template<class T, class U>
+template<class T, class Tr, class U>
     requires (!detail::is_optional_v<std::remove_cvref_t<U>> &&
               !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
               !std::same_as<std::remove_cvref_t<U>, std::nullopt_t> &&
               std::three_way_comparable_with<T, U>)
-constexpr std::compare_three_way_result_t<T, U> operator<=>(const optional<T>& opt, const U& value) {
+constexpr std::compare_three_way_result_t<T, U> operator<=>(const optional<T, Tr>& opt, const U& value) {
     return opt.has_value() ? *opt <=> value : std::strong_ordering::less;
 }
 
@@ -801,8 +825,8 @@ constexpr std::compare_three_way_result_t<T, U> operator<=>(const optional<T>& o
 // Specialized algorithms
 // ============================================================================
 
-template<class T>
-constexpr void swap(optional<T>& lhs, optional<T>& rhs)
+template<class T, class Tr>
+constexpr void swap(optional<T, Tr>& lhs, optional<T, Tr>& rhs)
     noexcept(noexcept(lhs.swap(rhs)))
 {
     lhs.swap(rhs);
@@ -831,9 +855,9 @@ optional(T) -> optional<T>;
 // Extend std::hash for optional
 namespace std {
 
-template<class T>
-struct hash<slim::optional<T>> {
-    constexpr size_t operator()(const slim::optional<T>& opt) const
+template<class T, class Tr>
+struct hash<slim::optional<T, Tr>> {
+    constexpr size_t operator()(const slim::optional<T, Tr>& opt) const
         noexcept(noexcept(hash<T>{}(std::declval<T>())))
         requires requires { hash<T>{}(std::declval<T>()); }
     {
