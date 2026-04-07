@@ -548,13 +548,13 @@ int main() {
     std::cout << "\n\n";
 
     // ========================================================================
-    // Never-empty (sentinel_traits<void>) benchmarks
+    // Never-empty (never_empty) benchmarks
     // ========================================================================
 
-    std::cout << "Never-empty optional (sentinel_traits<void>) Performance\n";
+    std::cout << "Never-empty optional (never_empty) Performance\n";
     std::cout << std::string(77, '-') << "\n";
 
-    using NeverEmpty = optional<int, sentinel_traits<void>>;
+    using NeverEmpty = optional<int, never_empty<int>>;
 
     benchmark("std::optional<int>: value construction", [](size_t n) {
         for (size_t i = 0; i < n; ++i) {

@@ -1206,7 +1206,7 @@ TEST(traits_public_inheritance) {
 }
 
 TEST(void_traits_no_overhead) {
-    using Opt = slim::optional<int, slim::sentinel_traits<void>>;
+    using Opt = slim::optional<int, slim::never_empty<int>>;
     static_assert(sizeof(Opt) == sizeof(int));
     static_assert(alignof(Opt) == alignof(int));
     static_assert(sizeof(Opt) < sizeof(std::optional<int>));
@@ -1218,7 +1218,7 @@ TEST(void_traits_no_overhead) {
     ASSERT(*o == 7);
 
     // Works for types with no natural sentinel (e.g. std::string).
-    using OptStr = slim::optional<std::string, slim::sentinel_traits<void>>;
+    using OptStr = slim::optional<std::string, slim::never_empty<std::string>>;
     static_assert(sizeof(OptStr) == sizeof(std::string));
     OptStr s{std::string{"hi"}};
     ASSERT(s.has_value() && *s == "hi");

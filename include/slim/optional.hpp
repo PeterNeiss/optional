@@ -77,11 +77,11 @@ concept has_sentinel_traits = requires { sizeof(sentinel_traits<T>); };
 // Escape-hatch specialization: a "never-empty" traits. When used as the
 // Traits parameter of slim::optional, is_sentinel is always false, so the
 // optional always reports has_value()==true and collapses to sizeof(T).
-template<>
-struct sentinel_traits<void> {
+template<typename T>
+struct never_empty {
 protected:
-    template<class U>
-    static constexpr bool is_sentinel(const U&) noexcept { return false; }
+    static constexpr T sentinel() { throw "never_empty"; }
+    static constexpr bool is_sentinel(const T&) noexcept { return false; }
 };
 
 // ── Scalar specializations ──
@@ -317,7 +317,6 @@ template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
 // sizeof(optional<T>) == sizeof(T) whenever Traits has no data members.
 template<class T, class Traits>
 class optional : public Traits {
-    static constexpr bool never_empty_ = std::same_as<Traits, sentinel_traits<void>>;
     T value_;
 
     static constexpr void validate_not_sentinel(const T& v) {
@@ -340,15 +339,15 @@ public:
     // trivially default constructible (only available under sentinel traits,
     // since the never-empty variant has no sentinel to fall back to).
     constexpr optional() noexcept(noexcept(T(Traits::sentinel())))
-        requires (!never_empty_ && !std::is_trivially_default_constructible_v<T>)
+        requires (!std::is_trivially_default_constructible_v<T>)
         : value_(Traits::sentinel()) {}
 
     constexpr optional(nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
-        requires (!never_empty_)
+      requires (!std::same_as<Traits, never_empty<T>>)
         : value_(Traits::sentinel()) {}
 
     constexpr optional(std::nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
-        requires (!never_empty_)
+      requires (!std::same_as<Traits, never_empty<T>>)
         : value_(Traits::sentinel()) {}
 
     constexpr optional(const optional& other) = default;
@@ -386,7 +385,7 @@ public:
 
     // Construct from another optional with different T
     template<class U>
-        requires (!never_empty_ && std::is_constructible_v<T, const U&>)
+        requires (std::is_constructible_v<T, const U&>)
     constexpr explicit(!std::is_convertible_v<const U&, T>)
     optional(const optional<U>& other)
         : value_(other.has_value() ? *other : Traits::sentinel())
@@ -397,7 +396,7 @@ public:
     }
 
     template<class U>
-        requires (!never_empty_ && std::is_constructible_v<T, U&&>)
+        requires (std::is_constructible_v<T, U&&>)
     constexpr explicit(!std::is_convertible_v<U&&, T>)
     optional(optional<U>&& other)
         : value_(other.has_value() ? std::move(*other) : Traits::sentinel())
@@ -409,7 +408,7 @@ public:
 
     // Construct from std::optional
     template<class U = T>
-        requires (!never_empty_ && std::is_constructible_v<T, const U&>)
+        requires (std::is_constructible_v<T, const U&>)
     constexpr explicit(!std::is_convertible_v<const U&, T>)
     optional(const std::optional<U>& other)
         : value_(other.has_value() ? *other : Traits::sentinel())
@@ -420,7 +419,7 @@ public:
     }
 
     template<class U = T>
-        requires (!never_empty_ && std::is_constructible_v<T, U&&>)
+        requires (std::is_constructible_v<T, U&&>)
     constexpr explicit(!std::is_convertible_v<U&&, T>)
     optional(std::optional<U>&& other)
         : value_(other.has_value() ? std::move(*other) : Traits::sentinel())
@@ -434,14 +433,14 @@ public:
 
     // Assignment
     constexpr optional& operator=(nullopt_t) noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
-        requires (!never_empty_)
+      requires (!std::same_as<Traits, never_empty<T>>)
     {
         value_ = Traits::sentinel();
         return *this;
     }
 
     constexpr optional& operator=(std::nullopt_t) noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
-        requires (!never_empty_)
+      requires (!std::same_as<Traits, never_empty<T>>)
     {
         value_ = Traits::sentinel();
         return *this;
@@ -461,7 +460,7 @@ public:
     }
 
     template<class U>
-        requires (!never_empty_ && std::is_constructible_v<T, const U&> &&
+        requires (std::is_constructible_v<T, const U&> &&
                   std::is_assignable_v<T&, const U&>)
     constexpr optional& operator=(const optional<U>& other) {
         if (other.has_value()) {
@@ -474,7 +473,7 @@ public:
     }
 
     template<class U>
-        requires (!never_empty_ && std::is_constructible_v<T, U> &&
+        requires (std::is_constructible_v<T, U> &&
                   std::is_assignable_v<T&, U>)
     constexpr optional& operator=(optional<U>&& other) {
         if (other.has_value()) {
@@ -488,7 +487,7 @@ public:
 
     // Assign from std::optional
     template<class U = T>
-        requires (!never_empty_ && std::is_constructible_v<T, const U&> &&
+        requires (std::is_constructible_v<T, const U&> &&
                   std::is_assignable_v<T&, const U&>)
     constexpr optional& operator=(const std::optional<U>& other) {
         if (other.has_value()) {
@@ -501,7 +500,7 @@ public:
     }
 
     template<class U = T>
-        requires (!never_empty_ && std::is_constructible_v<T, U> &&
+        requires (std::is_constructible_v<T, U> &&
                   std::is_assignable_v<T&, U>)
     constexpr optional& operator=(std::optional<U>&& other) {
         if (other.has_value()) {
@@ -598,7 +597,6 @@ public:
 
     // Modifiers
     constexpr void reset() noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
-        requires (!never_empty_)
     {
         value_ = Traits::sentinel();
     }
