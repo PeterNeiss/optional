@@ -99,7 +99,7 @@ struct sentinel_traits<Color> {
 // ============================================================================
 
 TEST(sentinel_default_construction) {
-    optional<int*> opt;
+    optional<int*> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(!opt);
 }
@@ -157,7 +157,7 @@ TEST(sentinel_std_in_place_construction) {
 
 TEST(sentinel_assignment) {
     int x = 42;
-    optional<int*> opt;
+    optional<int*> opt = nullopt;
     opt = &x;
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
@@ -174,14 +174,14 @@ TEST(sentinel_std_nullopt_assignment) {
 }
 
 TEST(sentinel_assignment_rejects_sentinel) {
-    optional<int*> opt;
+    optional<int*> opt = nullopt;
     ASSERT_THROWS(opt = nullptr, bad_optional_access);
 }
 
 TEST(sentinel_copy_assignment) {
     int x = 42;
     optional<int*> opt1(&x);
-    optional<int*> opt2;
+    optional<int*> opt2 = nullopt;
     opt2 = opt1;
     ASSERT(opt2.has_value());
     ASSERT(*opt1 == *opt2);
@@ -190,7 +190,7 @@ TEST(sentinel_copy_assignment) {
 TEST(sentinel_move_assignment) {
     int x = 42;
     optional<int*> opt1(&x);
-    optional<int*> opt2;
+    optional<int*> opt2 = nullopt;
     opt2 = std::move(opt1);
     ASSERT(opt2.has_value());
     ASSERT(**opt2 == 42);
@@ -201,7 +201,7 @@ TEST(sentinel_value) {
     optional<int*> opt(&x);
     ASSERT(opt.value() == &x);
 
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
     ASSERT_THROWS(empty.value(), bad_optional_access);
 }
 
@@ -211,7 +211,7 @@ TEST(sentinel_value_or) {
     optional<int*> opt(&x);
     ASSERT(opt.value_or(&y) == &x);
 
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
     ASSERT(empty.value_or(&y) == &y);
 }
 
@@ -225,14 +225,14 @@ TEST(sentinel_reset) {
 
 TEST(sentinel_emplace) {
     int x = 42;
-    optional<int*> opt;
+    optional<int*> opt = nullopt;
     opt.emplace(&x);
     ASSERT(opt.has_value());
     ASSERT(**opt == 42);
 }
 
 TEST(sentinel_emplace_rejects_sentinel) {
-    optional<int*> opt;
+    optional<int*> opt = nullopt;
     ASSERT_THROWS(opt.emplace(nullptr), bad_optional_access);
 }
 
@@ -246,7 +246,7 @@ TEST(sentinel_swap) {
     ASSERT(**opt1 == 99);
     ASSERT(**opt2 == 42);
 
-    optional<int*> opt3;
+    optional<int*> opt3 = nullopt;
     opt1.swap(opt3);
     ASSERT(!opt1.has_value());
     ASSERT(opt3.has_value());
@@ -259,7 +259,7 @@ TEST(sentinel_comparison) {
     optional<int*> opt1(&x);
     optional<int*> opt2(&x);
     optional<int*> opt3(&y);
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
 
     ASSERT(opt1 == opt2);
     ASSERT(opt1 != opt3);
@@ -277,7 +277,7 @@ TEST(sentinel_monadic_transform) {
     ASSERT(result.has_value());
     ASSERT(*result == 84);
 
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
     auto result2 = empty.transform([](int* p) { return *p * 2; });
     ASSERT(!result2.has_value());
 }
@@ -294,7 +294,7 @@ TEST(sentinel_monadic_and_then) {
 }
 
 TEST(sentinel_monadic_or_else) {
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
     int y = 99;
     auto result = empty.or_else([&y]() -> optional<int*> {
         return &y;
@@ -314,7 +314,7 @@ TEST(interop_construct_from_std_optional) {
     ASSERT(slim.has_value());
     ASSERT(**slim == 42);
 
-    std::optional<int*> empty_std;
+    std::optional<int*> empty_std = std::nullopt;
     optional<int*> slim2(empty_std);
     ASSERT(!slim2.has_value());
 }
@@ -322,12 +322,12 @@ TEST(interop_construct_from_std_optional) {
 TEST(interop_assign_from_std_optional) {
     int x = 42;
     std::optional<int*> std_opt(&x);
-    optional<int*> slim;
+    optional<int*> slim = nullopt;
     slim = std_opt;
     ASSERT(slim.has_value());
     ASSERT(**slim == 42);
 
-    std::optional<int*> empty_std;
+    std::optional<int*> empty_std = std::nullopt;
     slim = empty_std;
     ASSERT(!slim.has_value());
 }
@@ -339,7 +339,7 @@ TEST(interop_convert_to_std_optional) {
     ASSERT(std_opt.has_value());
     ASSERT(**std_opt == 42);
 
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
     std::optional<int*> empty_std = empty;
     ASSERT(!empty_std.has_value());
 }
@@ -364,7 +364,7 @@ TEST(interop_compare_with_std_optional) {
 // ============================================================================
 
 TEST(enum_sentinel_basic) {
-    optional<Status> opt;
+    optional<Status> opt = nullopt;
     ASSERT(!opt.has_value());
 
     opt = Status::OK;
@@ -390,7 +390,7 @@ TEST(enum_sentinel_sizeof) {
 // ============================================================================
 
 constexpr bool constexpr_sentinel_test() {
-    optional<int> opt;
+    optional<int> opt = nullopt;
     if (opt.has_value()) return false;
 
     opt = 42;
@@ -436,7 +436,7 @@ TEST(sizeof_comparisons) {
 // ============================================================================
 
 TEST(custom_type_sentinel) {
-    optional<Point> opt;
+    optional<Point> opt = nullopt;
     ASSERT(!opt.has_value());
 
     opt = Point{10, 20};
@@ -465,7 +465,7 @@ TEST(hash_support) {
     int x = 42;
     optional<int*> opt1(&x);
     optional<int*> opt2(&x);
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
 
     std::hash<optional<int*>> hasher;
 
@@ -517,7 +517,7 @@ TEST(and_then_returns_std_optional) {
     ASSERT(result.has_value());
     ASSERT(*result == 84);
 
-    optional<int*> empty;
+    optional<int*> empty = nullopt;
     auto result2 = empty.and_then([](int* p) -> std::optional<int> {
         return *p;
     });
@@ -570,7 +570,7 @@ TEST(vector_of_optionals) {
 // ============================================================================
 
 TEST(signed_int) {
-    optional<int> opt;
+    optional<int> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(int));
 
@@ -596,7 +596,7 @@ TEST(signed_int_rejects_sentinel) {
 }
 
 TEST(unsigned_int) {
-    optional<unsigned> opt;
+    optional<unsigned> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(unsigned));
 
@@ -617,7 +617,7 @@ TEST(unsigned_rejects_sentinel) {
 }
 
 TEST(int8) {
-    optional<int8_t> opt;
+    optional<int8_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(int8_t));
 
@@ -627,7 +627,7 @@ TEST(int8) {
 }
 
 TEST(int16) {
-    optional<int16_t> opt;
+    optional<int16_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(int16_t));
 
@@ -637,7 +637,7 @@ TEST(int16) {
 }
 
 TEST(int64) {
-    optional<int64_t> opt;
+    optional<int64_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(int64_t));
 
@@ -647,7 +647,7 @@ TEST(int64) {
 }
 
 TEST(uint64) {
-    optional<uint64_t> opt;
+    optional<uint64_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(uint64_t));
 
@@ -657,7 +657,7 @@ TEST(uint64) {
 }
 
 TEST(size_t_type) {
-    optional<std::size_t> opt;
+    optional<std::size_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(std::size_t));
 
@@ -671,7 +671,7 @@ TEST(size_t_type) {
 // ============================================================================
 
 TEST(pointer) {
-    optional<int*> opt;
+    optional<int*> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(int*));
 
@@ -698,7 +698,7 @@ TEST(pointer_value_assign_sentinel) {
 }
 
 TEST(const_pointer) {
-    optional<const char*> opt;
+    optional<const char*> opt = nullopt;
     ASSERT(!opt.has_value());
 
     opt = "hello";
@@ -713,7 +713,7 @@ TEST(const_pointer) {
 // ============================================================================
 
 TEST(float_type) {
-    optional<float> opt;
+    optional<float> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(float));
 
@@ -733,7 +733,7 @@ TEST(float_type) {
 }
 
 TEST(double_type) {
-    optional<double> opt;
+    optional<double> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(double));
 
@@ -759,7 +759,7 @@ TEST(double_rejects_nan) {
 }
 
 TEST(long_double_type) {
-    optional<long double> opt;
+    optional<long double> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(long double));
 
@@ -782,7 +782,7 @@ TEST(long_double_rejects_nan) {
 TEST(float_spaceship) {
     optional<float> a(1.0f);
     optional<float> b(2.0f);
-    optional<float> empty;
+    optional<float> empty = nullopt;
 
     ASSERT((a <=> b) == std::partial_ordering::less);
     ASSERT((b <=> a) == std::partial_ordering::greater);
@@ -799,7 +799,7 @@ TEST(float_spaceship) {
 TEST(double_spaceship) {
     optional<double> a(1.0);
     optional<double> b(2.0);
-    optional<double> empty;
+    optional<double> empty = nullopt;
 
     ASSERT((a <=> b) == std::partial_ordering::less);
     ASSERT((empty <=> a) == std::partial_ordering::less);
@@ -811,7 +811,7 @@ TEST(double_spaceship) {
 // ============================================================================
 
 TEST(char16) {
-    optional<char16_t> opt;
+    optional<char16_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(char16_t));
 
@@ -824,7 +824,7 @@ TEST(char16) {
 }
 
 TEST(char32) {
-    optional<char32_t> opt;
+    optional<char32_t> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(char32_t));
 
@@ -867,7 +867,7 @@ TEST(shared_ptr_type) {
 }
 
 TEST(string_view_type) {
-    optional<std::string_view> opt;
+    optional<std::string_view> opt = nullopt;
     ASSERT(!opt.has_value());
     ASSERT(sizeof(opt) == sizeof(std::string_view));
 
@@ -938,7 +938,7 @@ TEST(coroutine_handle_type) {
 }
 
 TEST(any_type) {
-    optional<std::any> opt;
+    optional<std::any> opt = nullopt;
     ASSERT(!opt.has_value());
 
     opt = std::any{42};
@@ -1052,19 +1052,19 @@ TEST(numeric_limits_char16_32) {
 // ============================================================================
 
 constexpr bool constexpr_all_test() {
-    optional<int> i;
+    optional<int> i = nullopt;
     if (i.has_value()) return false;
     i = 42;
     if (*i != 42) return false;
     i.reset();
     if (i.has_value()) return false;
 
-    optional<double> d;
+    optional<double> d = nullopt;
     if (d.has_value()) return false;
     d = 3.14;
     if (*d != 3.14) return false;
 
-    optional<int*> p;
+    optional<int*> p = nullopt;
     if (p.has_value()) return false;
 
     return true;
@@ -1080,7 +1080,7 @@ TEST(constexpr_all) {
 // ============================================================================
 
 TEST(sentinel_traits_user_type_basic) {
-    optional<Color> c;
+    optional<Color> c = nullopt;
     ASSERT(!c.has_value());
 
     c = Color{255, 0, 0, 255};
@@ -1097,7 +1097,7 @@ TEST(sentinel_traits_user_type_basic) {
     ASSERT(c2->g == 128);
 
     // value_or
-    optional<Color> empty;
+    optional<Color> empty = nullopt;
     Color fallback{1, 1, 1, 1};
     ASSERT(empty.value_or(fallback) == fallback);
 }
@@ -1153,7 +1153,7 @@ TEST(sentinel_traits_copy_move) {
     ASSERT(c3.has_value());
     ASSERT(c3->r == 10);
 
-    optional<Color> empty;
+    optional<Color> empty = nullopt;
     optional<Color> c4 = empty;  // copy empty
     ASSERT(!c4.has_value());
 }
@@ -1166,7 +1166,7 @@ TEST(sentinel_traits_std_optional_interop) {
     ASSERT(stdopt->r == 1);
 
     // Empty conversion
-    optional<Color> empty;
+    optional<Color> empty = nullopt;
     std::optional<Color> stdopt2 = empty;
     ASSERT(!stdopt2.has_value());
 }
@@ -1189,8 +1189,12 @@ TEST(void_traits_no_overhead) {
     OptStr s{std::string{"hi"}};
     ASSERT(s.has_value() && *s == "hi");
 
-    // Empty-state operations must be ill-formed for the never-empty variant.
-    static_assert(!std::is_default_constructible_v<Opt>);
+    // Default constructor is trivial when T is trivially default constructible.
+    static_assert(std::is_trivially_default_constructible_v<Opt>);
+    static_assert(std::is_trivially_default_constructible_v<slim::optional<int>>);
+    static_assert(std::is_trivially_default_constructible_v<slim::optional<int*>>);
+
+    // nullopt-based empty-state operations remain ill-formed for the never-empty variant.
     static_assert(!std::is_assignable_v<Opt&, slim::nullopt_t>);
     static_assert(!std::is_constructible_v<Opt, slim::nullopt_t>);
 }

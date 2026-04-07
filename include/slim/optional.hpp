@@ -302,9 +302,17 @@ public:
     using value_type = T;
     using traits_type = Traits;
 
-    // Constructors
+    // Default constructor — trivial whenever T is trivially default
+    // constructible. In that case value_ is left in T's default-initialized
+    // state (indeterminate for scalars, value-initialized for class types);
+    // use `optional o = nullopt;` if you need a guaranteed-empty optional.
+    constexpr optional() requires std::is_trivially_default_constructible_v<T> = default;
+
+    // Fallback: sentinel-initializing default constructor for T that is not
+    // trivially default constructible (only available under sentinel traits,
+    // since the never-empty variant has no sentinel to fall back to).
     constexpr optional() noexcept(noexcept(T(Traits::sentinel())))
-        requires (!never_empty_)
+        requires (!never_empty_ && !std::is_trivially_default_constructible_v<T>)
         : value_(Traits::sentinel()) {}
 
     constexpr optional(nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
@@ -593,7 +601,7 @@ public:
         if (has_value()) {
             return std::forward<F>(f)(value_);
         } else {
-            return U{};
+            return U(std::nullopt);
         }
     }
 
@@ -604,7 +612,7 @@ public:
         if (has_value()) {
             return std::forward<F>(f)(value_);
         } else {
-            return U{};
+            return U(std::nullopt);
         }
     }
 
@@ -615,7 +623,7 @@ public:
         if (has_value()) {
             return std::forward<F>(f)(std::move(value_));
         } else {
-            return U{};
+            return U(std::nullopt);
         }
     }
 
@@ -626,7 +634,7 @@ public:
         if (has_value()) {
             return std::forward<F>(f)(std::move(value_));
         } else {
-            return U{};
+            return U(std::nullopt);
         }
     }
 
@@ -637,13 +645,13 @@ public:
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(value_)};
             } else {
-                return optional<U>{};
+                return optional<U>(nullopt);
             }
         } else {
             if (has_value()) {
                 return std::optional<U>{std::forward<F>(f)(value_)};
             } else {
-                return std::optional<U>{};
+                return std::optional<U>(std::nullopt);
             }
         }
     }
@@ -655,13 +663,13 @@ public:
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(value_)};
             } else {
-                return optional<U>{};
+                return optional<U>(nullopt);
             }
         } else {
             if (has_value()) {
                 return std::optional<U>{std::forward<F>(f)(value_)};
             } else {
-                return std::optional<U>{};
+                return std::optional<U>(std::nullopt);
             }
         }
     }
@@ -673,13 +681,13 @@ public:
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(std::move(value_))};
             } else {
-                return optional<U>{};
+                return optional<U>(nullopt);
             }
         } else {
             if (has_value()) {
                 return std::optional<U>{std::forward<F>(f)(std::move(value_))};
             } else {
-                return std::optional<U>{};
+                return std::optional<U>(std::nullopt);
             }
         }
     }
@@ -691,13 +699,13 @@ public:
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(std::move(value_))};
             } else {
-                return optional<U>{};
+                return optional<U>(nullopt);
             }
         } else {
             if (has_value()) {
                 return std::optional<U>{std::forward<F>(f)(std::move(value_))};
             } else {
-                return std::optional<U>{};
+                return std::optional<U>(std::nullopt);
             }
         }
     }

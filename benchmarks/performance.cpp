@@ -2,6 +2,8 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <cstring>
+#include <new>
 #include <optional>
 #include <vector>
 #include <random>
@@ -74,7 +76,7 @@ int main() {
 
     benchmark("optional: default construction", [](size_t n) {
         for (size_t i = 0; i < n; ++i) {
-            optional<int*> opt;
+            optional<int*> opt = nullopt;
             do_not_optimize(opt);
         }
     });
@@ -446,6 +448,99 @@ int main() {
     std::cout << "\nCache effect speedup: "
               << std::fixed << std::setprecision(2)
               << (std_time / slim_time) << "x\n";
+
+    std::cout << "\n\n";
+
+    // ========================================================================
+    // Trivial vs nullopt default construction
+    // ========================================================================
+
+    std::cout << "Trivial vs nullopt Construction\n";
+    std::cout << std::string(77, '-') << "\n";
+    std::cout << "Trivial default construction emits zero instructions (value_ is\n"
+                 "left indeterminate); nullopt construction must write the sentinel\n"
+                 "into every element. We measure this as a bulk fill over a reused,\n"
+                 "pre-faulted buffer so allocation and page-fault cost are equal.\n";
+
+    {
+        constexpr size_t slots = 1 << 20;  // 1 Mi elements
+        const size_t reps = 32;            // ~32 Mi constructions total
+
+        // Reused storage, pre-faulted so neither variant pays page-fault cost.
+        auto* buf_int = static_cast<optional<int>*>(
+            ::operator new(slots * sizeof(optional<int>)));
+        auto* buf_ptr = static_cast<optional<int*>*>(
+            ::operator new(slots * sizeof(optional<int*>)));
+        std::memset(buf_int, 0xAA, slots * sizeof(optional<int>));
+        std::memset(buf_ptr, 0xAA, slots * sizeof(optional<int*>));
+
+        // Trivial default: placement-new of a trivially default constructible
+        // type is a no-op — the loop should compile to nothing but pointer
+        // increments (effectively eliminated). do_not_optimize on the buffer
+        // prevents the whole call from being dropped.
+        benchmark("optional<int>: trivial default construction", [&](size_t) {
+            for (size_t r = 0; r < reps; ++r) {
+                for (size_t i = 0; i < slots; ++i) {
+                    ::new (buf_int + i) optional<int>;
+                }
+                do_not_optimize_away(buf_int);
+            }
+        }, slots * reps);
+
+        // nullopt: writes sentinel_traits<int>::sentinel() (== INT_MIN) into
+        // every slot. Should vectorize to a tight store loop.
+        benchmark("optional<int>: nullopt construction", [&](size_t) {
+            for (size_t r = 0; r < reps; ++r) {
+                for (size_t i = 0; i < slots; ++i) {
+                    ::new (buf_int + i) optional<int>(nullopt);
+                }
+                do_not_optimize_away(buf_int);
+            }
+        }, slots * reps);
+
+        std::cout << "\n";
+
+        benchmark("optional<int*>: trivial default construction", [&](size_t) {
+            for (size_t r = 0; r < reps; ++r) {
+                for (size_t i = 0; i < slots; ++i) {
+                    ::new (buf_ptr + i) optional<int*>;
+                }
+                do_not_optimize_away(buf_ptr);
+            }
+        }, slots * reps);
+
+        benchmark("optional<int*>: nullopt construction", [&](size_t) {
+            for (size_t r = 0; r < reps; ++r) {
+                for (size_t i = 0; i < slots; ++i) {
+                    ::new (buf_ptr + i) optional<int*>(nullopt);
+                }
+                do_not_optimize_away(buf_ptr);
+            }
+        }, slots * reps);
+
+        std::cout << "\n";
+
+        // Sanity: prove the two variants really differ semantically. Reset
+        // the buffer to a non-sentinel bit pattern first so trivial default
+        // doesn't read leftover INT_MINs from the nullopt benchmark above.
+        long long empty_after_trivial = 0, empty_after_nullopt = 0;
+        std::memset(buf_int, 0xAA, slots * sizeof(optional<int>));
+        for (size_t i = 0; i < slots; ++i) {
+            ::new (buf_int + i) optional<int>;
+        }
+        for (size_t i = 0; i < slots; ++i) empty_after_trivial += !buf_int[i].has_value();
+        for (size_t i = 0; i < slots; ++i) {
+            ::new (buf_int + i) optional<int>(nullopt);
+        }
+        for (size_t i = 0; i < slots; ++i) empty_after_nullopt += !buf_int[i].has_value();
+        std::cout << "  sanity: after trivial default, empty slots = "
+                  << empty_after_trivial << " / " << slots << "\n"
+                  << "          after nullopt ctor,    empty slots = "
+                  << empty_after_nullopt << " / " << slots << "\n";
+
+        ::operator delete(buf_int);
+        ::operator delete(buf_ptr);
+    }
 
     std::cout << "\n\n";
 
