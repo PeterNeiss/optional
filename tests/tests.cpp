@@ -56,6 +56,7 @@ enum class Status : int32_t {
 namespace slim {
 template<>
 struct sentinel_traits<Status> {
+protected:
     static constexpr Status sentinel() noexcept { return Status::INVALID; }
     static constexpr bool is_sentinel(const Status& v) noexcept { return v == Status::INVALID; }
 };
@@ -73,6 +74,7 @@ struct Point {
 namespace slim {
 template<>
 struct sentinel_traits<Point> {
+protected:
     static constexpr Point sentinel() noexcept { return {-9999, -9999}; }
     static constexpr bool is_sentinel(const Point& v) noexcept { return v.x == -9999 && v.y == -9999; }
 };
@@ -87,6 +89,7 @@ struct Color {
 namespace slim {
 template<>
 struct sentinel_traits<Color> {
+protected:
     static constexpr Color sentinel() noexcept { return {0, 0, 0, 0}; }
     static constexpr bool is_sentinel(const Color& v) noexcept {
         return v.r == 0 && v.g == 0 && v.b == 0 && v.a == 0;
@@ -1171,6 +1174,37 @@ TEST(sentinel_traits_std_optional_interop) {
     ASSERT(!stdopt2.has_value());
 }
 
+// Traits class with user-added public members (constants, typedefs) plus
+// protected sentinel()/is_sentinel() — exactly the pattern users follow.
+struct TaggedTraits {
+    static constexpr const char* category = "tagged";
+    using extra_tag = int;
+protected:
+    static constexpr int sentinel() noexcept { return -1; }
+    static constexpr bool is_sentinel(const int& v) noexcept { return v == -1; }
+};
+
+TEST(traits_public_inheritance) {
+    using Opt = slim::optional<int, TaggedTraits>;
+
+    // Public members of the traits class are reachable through the optional.
+    static_assert(std::string_view{Opt::category} == "tagged");
+    static_assert(std::is_same_v<typename Opt::extra_tag, int>);
+
+    // EBO preserves sizeof(optional<T>) == sizeof(T) for empty traits.
+    static_assert(sizeof(Opt) == sizeof(int));
+
+    // Derived-to-base conversion compiles.
+    Opt o{42};
+    TaggedTraits& base = o;
+    (void)base;
+
+    ASSERT(o.has_value());
+    ASSERT(*o == 42);
+    o = nullopt;
+    ASSERT(!o.has_value());
+}
+
 TEST(void_traits_no_overhead) {
     using Opt = slim::optional<int, slim::sentinel_traits<void>>;
     static_assert(sizeof(Opt) == sizeof(int));
@@ -1335,6 +1369,7 @@ int main() {
     RUN_TEST(sentinel_traits_nullopt_construction);
     RUN_TEST(sentinel_traits_copy_move);
     RUN_TEST(sentinel_traits_std_optional_interop);
+    RUN_TEST(traits_public_inheritance);
     RUN_TEST(void_traits_no_overhead);
 
     std::cout << "\n======================================\n";

@@ -21,6 +21,7 @@ enum class FileHandle : int32_t {
 namespace slim {
 template<>
 struct sentinel_traits<FileHandle> {
+protected:
     static constexpr FileHandle sentinel() noexcept { return FileHandle::INVALID; }
     static constexpr bool is_sentinel(const FileHandle& v) noexcept { return v == FileHandle::INVALID; }
 };
@@ -36,6 +37,7 @@ struct ResourceHandle {
 namespace slim {
 template<>
 struct sentinel_traits<ResourceHandle> {
+protected:
     static constexpr ResourceHandle sentinel() noexcept { return {-1}; }
     static constexpr bool is_sentinel(const ResourceHandle& v) noexcept { return v.id == -1; }
 };
@@ -53,6 +55,7 @@ struct Point {
 namespace slim {
 template<>
 struct sentinel_traits<Point> {
+protected:
     static constexpr Point sentinel() noexcept { return {-1, -1}; }
     static constexpr bool is_sentinel(const Point& v) noexcept { return v.x == -1 && v.y == -1; }
 };

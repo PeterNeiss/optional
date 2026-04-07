@@ -66,33 +66,37 @@ inline constexpr in_place_t in_place{};
 template<class T>
 struct sentinel_traits;
 
-// Concept: does sentinel_traits<T> provide the required interface?
+// Concept: is sentinel_traits<T> defined (i.e. a complete type)?
+// The primary template is declared but never defined, so completeness
+// tracks opt-in specializations without needing access to their (now
+// protected) members. Declared below after all specializations so that
+// users can add their own specializations and then refer to this concept.
 template<class T>
-concept has_sentinel_traits = requires(const T& v) {
-    { sentinel_traits<T>::sentinel() };
-    { sentinel_traits<T>::is_sentinel(v) } -> std::same_as<bool>;
-};
+concept has_sentinel_traits = requires { sizeof(sentinel_traits<T>); };
 
 // Escape-hatch specialization: a "never-empty" traits. When used as the
 // Traits parameter of slim::optional, is_sentinel is always false, so the
 // optional always reports has_value()==true and collapses to sizeof(T).
 template<>
 struct sentinel_traits<void> {
+protected:
     template<class U>
     static constexpr bool is_sentinel(const U&) noexcept { return false; }
 };
 
-template<class T, class Traits>
-concept valid_optional_traits =
-    std::same_as<Traits, sentinel_traits<void>> || has_sentinel_traits<T>;
-
 // ── Scalar specializations ──
+//
+// Every built-in specialization makes sentinel()/is_sentinel() protected.
+// They are accessed only by slim::optional<T, Traits>, which inherits
+// publicly from Traits. Users adding their own sentinel_traits<T>
+// specialization should do the same — nothing else is required.
 
 // Signed integers (excluding bool)
 template<class T>
     requires (std::signed_integral<T> && !std::same_as<T, bool>)
 struct sentinel_traits<T>
 {
+protected:
     static constexpr T sentinel() noexcept { return std::numeric_limits<T>::min(); }
     static constexpr bool is_sentinel(const T& v) noexcept { return v == std::numeric_limits<T>::min(); }
 };
@@ -102,6 +106,7 @@ template<class T>
     requires (std::unsigned_integral<T> && !std::same_as<T, bool> && !std::same_as<T, char8_t>)
 struct sentinel_traits<T>
 {
+protected:
     static constexpr T sentinel() noexcept { return std::numeric_limits<T>::max(); }
     static constexpr bool is_sentinel(const T& v) noexcept { return v == std::numeric_limits<T>::max(); }
 };
@@ -110,18 +115,21 @@ struct sentinel_traits<T>
 // v != v is true iff v is any NaN, and is constexpr everywhere.
 template<>
 struct sentinel_traits<float> {
+protected:
     static constexpr float sentinel() noexcept { return std::numeric_limits<float>::quiet_NaN(); }
     static constexpr bool is_sentinel(const float& v) noexcept { return v != v; }
 };
 
 template<>
 struct sentinel_traits<double> {
+protected:
     static constexpr double sentinel() noexcept { return std::numeric_limits<double>::quiet_NaN(); }
     static constexpr bool is_sentinel(const double& v) noexcept { return v != v; }
 };
 
 template<>
 struct sentinel_traits<long double> {
+protected:
     static constexpr long double sentinel() noexcept { return std::numeric_limits<long double>::quiet_NaN(); }
     static constexpr bool is_sentinel(const long double& v) noexcept { return v != v; }
 };
@@ -129,6 +137,7 @@ struct sentinel_traits<long double> {
 // Pointers → nullptr
 template<class T>
 struct sentinel_traits<T*> {
+protected:
     static constexpr T* sentinel() noexcept { return nullptr; }
     static constexpr bool is_sentinel(T* const& v) noexcept { return v == nullptr; }
 };
@@ -136,6 +145,7 @@ struct sentinel_traits<T*> {
 // char16_t → 0xFFFF (Unicode noncharacter)
 template<>
 struct sentinel_traits<char16_t> {
+protected:
     static constexpr char16_t sentinel() noexcept { return 0xFFFF; }
     static constexpr bool is_sentinel(const char16_t& v) noexcept { return v == static_cast<char16_t>(0xFFFF); }
 };
@@ -143,6 +153,7 @@ struct sentinel_traits<char16_t> {
 // char32_t → 0xFFFFFFFF (beyond Unicode range)
 template<>
 struct sentinel_traits<char32_t> {
+protected:
     static constexpr char32_t sentinel() noexcept { return 0xFFFFFFFF; }
     static constexpr bool is_sentinel(const char32_t& v) noexcept { return v == static_cast<char32_t>(0xFFFFFFFF); }
 };
@@ -153,18 +164,21 @@ struct sentinel_traits<char32_t> {
 
 template<class T, class D>
 struct sentinel_traits<std::unique_ptr<T, D>> {
+protected:
     static std::unique_ptr<T, D> sentinel() noexcept { return nullptr; }
     static bool is_sentinel(const std::unique_ptr<T, D>& v) noexcept { return !v; }
 };
 
 template<class T>
 struct sentinel_traits<std::shared_ptr<T>> {
+protected:
     static std::shared_ptr<T> sentinel() noexcept { return nullptr; }
     static bool is_sentinel(const std::shared_ptr<T>& v) noexcept { return !v; }
 };
 
 template<class CharT, class Traits>
 struct sentinel_traits<std::basic_string_view<CharT, Traits>> {
+protected:
     static constexpr std::basic_string_view<CharT, Traits> sentinel() noexcept {
         return std::basic_string_view<CharT, Traits>{nullptr, 0};
     }
@@ -175,50 +189,59 @@ struct sentinel_traits<std::basic_string_view<CharT, Traits>> {
 
 template<class T, std::size_t E>
 struct sentinel_traits<std::span<T, E>> {
+protected:
     static constexpr std::span<T, E> sentinel() noexcept { return std::span<T, E>{}; }
     static constexpr bool is_sentinel(const std::span<T, E>& v) noexcept { return v.data() == nullptr; }
 };
 
 template<class F>
 struct sentinel_traits<std::function<F>> {
+protected:
     static std::function<F> sentinel() noexcept { return nullptr; }
     static bool is_sentinel(const std::function<F>& v) noexcept { return !v; }
 };
 
 template<class F>
 struct sentinel_traits<std::move_only_function<F>> {
+protected:
     static std::move_only_function<F> sentinel() noexcept { return {}; }
     static bool is_sentinel(const std::move_only_function<F>& v) noexcept { return !v; }
 };
 
 template<class P>
 struct sentinel_traits<std::coroutine_handle<P>> {
+protected:
     static constexpr std::coroutine_handle<P> sentinel() noexcept { return std::coroutine_handle<P>{}; }
     static constexpr bool is_sentinel(const std::coroutine_handle<P>& v) noexcept { return !v; }
 };
 
 template<>
 struct sentinel_traits<std::any> {
+protected:
     static std::any sentinel() noexcept { return std::any{}; }
     static bool is_sentinel(const std::any& v) noexcept { return !v.has_value(); }
 };
 
 template<>
 struct sentinel_traits<std::thread::id> {
+protected:
     static constexpr std::thread::id sentinel() noexcept { return std::thread::id{}; }
     static constexpr bool is_sentinel(const std::thread::id& v) noexcept { return v == std::thread::id{}; }
 };
 
 template<>
 struct sentinel_traits<std::stop_token> {
+protected:
     static std::stop_token sentinel() noexcept { return std::stop_token{}; }
     static bool is_sentinel(const std::stop_token& v) noexcept { return !v.stop_possible(); }
 };
 
-// chrono::duration — uses the underlying Rep's sentinel (min() for integers, NaN for floats)
+// chrono::duration — uses the underlying Rep's sentinel (min() for integers, NaN for floats).
+// Accesses the (protected) members of sentinel_traits<Rep> via inheritance.
 template<class Rep, class Period>
     requires has_sentinel_traits<Rep>
-struct sentinel_traits<std::chrono::duration<Rep, Period>> {
+struct sentinel_traits<std::chrono::duration<Rep, Period>> : private sentinel_traits<Rep> {
+protected:
     static constexpr std::chrono::duration<Rep, Period> sentinel() noexcept {
         return std::chrono::duration<Rep, Period>{sentinel_traits<Rep>::sentinel()};
     }
@@ -230,7 +253,8 @@ struct sentinel_traits<std::chrono::duration<Rep, Period>> {
 // chrono::time_point — uses the underlying Duration's sentinel
 template<class Clock, class Duration>
     requires has_sentinel_traits<Duration>
-struct sentinel_traits<std::chrono::time_point<Clock, Duration>> {
+struct sentinel_traits<std::chrono::time_point<Clock, Duration>> : private sentinel_traits<Duration> {
+protected:
     static constexpr std::chrono::time_point<Clock, Duration> sentinel() noexcept {
         return std::chrono::time_point<Clock, Duration>{sentinel_traits<Duration>::sentinel()};
     }
@@ -241,6 +265,7 @@ struct sentinel_traits<std::chrono::time_point<Clock, Duration>> {
 
 template<class T>
 struct sentinel_traits<std::complex<T>> {
+protected:
     static constexpr std::complex<T> sentinel() noexcept {
         return std::complex<T>{std::numeric_limits<T>::quiet_NaN(), std::numeric_limits<T>::quiet_NaN()};
     }
@@ -254,6 +279,7 @@ struct sentinel_traits<std::complex<T>> {
 // exception_ptr — available in both modes (uses <exception> which is always included)
 template<>
 struct sentinel_traits<std::exception_ptr> {
+protected:
     static constexpr std::exception_ptr sentinel() noexcept { return std::exception_ptr{}; }
     static constexpr bool is_sentinel(const std::exception_ptr& v) noexcept { return !v; }
 };
@@ -276,7 +302,6 @@ struct sentinel_traits<std::exception_ptr> {
 // ============================================================================
 
 template<class T, class Traits = sentinel_traits<T>>
-    requires valid_optional_traits<T, Traits>
 class optional;
 
 // Helper trait to detect optional types (slim or std)
@@ -286,9 +311,12 @@ template<class T, class Tr> inline constexpr bool is_optional_v<optional<T, Tr>>
 template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
 }
 
+// Publicly inherits from Traits so any public members users attach to
+// their sentinel_traits specialization (constants, typedefs, helpers) are
+// reachable through the optional. Empty-base optimization keeps
+// sizeof(optional<T>) == sizeof(T) whenever Traits has no data members.
 template<class T, class Traits>
-    requires valid_optional_traits<T, Traits>
-class optional {
+class optional : public Traits {
     static constexpr bool never_empty_ = std::same_as<Traits, sentinel_traits<void>>;
     T value_;
 

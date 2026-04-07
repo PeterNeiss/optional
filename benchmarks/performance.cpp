@@ -2,7 +2,6 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
-#include <cstring>
 #include <new>
 #include <optional>
 #include <vector>
@@ -467,12 +466,15 @@ int main() {
         const size_t reps = 32;            // ~32 Mi constructions total
 
         // Reused storage, pre-faulted so neither variant pays page-fault cost.
+        // Prime each slot via placement-new with a non-sentinel value so the
+        // pages are touched and the bytes hold a known, non-empty pattern.
         auto* buf_int = static_cast<optional<int>*>(
             ::operator new(slots * sizeof(optional<int>)));
         auto* buf_ptr = static_cast<optional<int*>*>(
             ::operator new(slots * sizeof(optional<int*>)));
-        std::memset(buf_int, 0xAA, slots * sizeof(optional<int>));
-        std::memset(buf_ptr, 0xAA, slots * sizeof(optional<int*>));
+        int dummy_int = 1;
+        for (size_t i = 0; i < slots; ++i) ::new (buf_int + i) optional<int>(1);
+        for (size_t i = 0; i < slots; ++i) ::new (buf_ptr + i) optional<int*>(&dummy_int);
 
         // Trivial default: placement-new of a trivially default constructible
         // type is a no-op — the loop should compile to nothing but pointer
@@ -521,10 +523,11 @@ int main() {
         std::cout << "\n";
 
         // Sanity: prove the two variants really differ semantically. Reset
-        // the buffer to a non-sentinel bit pattern first so trivial default
-        // doesn't read leftover INT_MINs from the nullopt benchmark above.
+        // the buffer to a non-sentinel pattern first (via placement-new with
+        // value 1) so trivial default doesn't read leftover INT_MINs from
+        // the nullopt benchmark above.
         long long empty_after_trivial = 0, empty_after_nullopt = 0;
-        std::memset(buf_int, 0xAA, slots * sizeof(optional<int>));
+        for (size_t i = 0; i < slots; ++i) ::new (buf_int + i) optional<int>(1);
         for (size_t i = 0; i < slots; ++i) {
             ::new (buf_int + i) optional<int>;
         }
