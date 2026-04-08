@@ -339,9 +339,16 @@ template<class T, class Traits>
 class optional : public Traits {
     T value_;
 
+    // Throws if v matches the trait's sentinel. The check (and the unwind
+    // path it implies) is elided at compile time when the target trait has
+    // no representable empty state — under never_empty<T>, is_sentinel
+    // always returns false, so the function reduces to a no-op and the
+    // exception handler vanishes from generated code.
     static constexpr void validate_not_sentinel(const T& v) {
-        if (Traits::is_sentinel(v)) {
-            throw bad_optional_access("Cannot construct optional with sentinel value");
+        if constexpr (can_be_empty) {
+            if (Traits::is_sentinel(v)) {
+                throw bad_optional_access("Cannot construct optional with sentinel value");
+            }
         }
     }
 
@@ -784,6 +791,52 @@ public:
     }
 };
 
+// Comparisons for the always_empty specialization. The generic templates
+// below would short-circuit on has_value() at runtime, but they call
+// `*lhs == *rhs` in unreachable branches — and operator* is deliberately
+// not provided on the always_empty specialization, so those templates fail
+// to instantiate. These overloads are picked first by partial-ordering.
+template<class T>
+constexpr bool operator==(const optional<T, always_empty<T>>&,
+                          const optional<T, always_empty<T>>&) noexcept {
+    return true;
+}
+
+template<class T>
+constexpr std::strong_ordering operator<=>(const optional<T, always_empty<T>>&,
+                                           const optional<T, always_empty<T>>&) noexcept {
+    return std::strong_ordering::equal;
+}
+
+// always_empty vs any other optional (slim or std): equal iff the other is
+// also empty.
+template<class T, class Tr>
+constexpr bool operator==(const optional<T, always_empty<T>>&,
+                          const optional<T, Tr>& other) noexcept {
+    return !other.has_value();
+}
+template<class T, class Tr>
+constexpr bool operator==(const optional<T, Tr>& other,
+                          const optional<T, always_empty<T>>&) noexcept {
+    return !other.has_value();
+}
+template<class T, class U>
+constexpr bool operator==(const optional<T, always_empty<T>>&,
+                          const std::optional<U>& other) noexcept {
+    return !other.has_value();
+}
+template<class T, class U>
+constexpr bool operator==(const std::optional<U>& other,
+                          const optional<T, always_empty<T>>&) noexcept {
+    return !other.has_value();
+}
+
+// always_empty vs nullopt: trivially equal.
+template<class T>
+constexpr bool operator==(const optional<T, always_empty<T>>&, nullopt_t) noexcept {
+    return true;
+}
+
 // ============================================================================
 // Comparison operators — optional vs optional
 // ============================================================================
@@ -814,6 +867,7 @@ constexpr std::compare_three_way_result_t<T> operator<=>(const optional<T, Tr>& 
 // ============================================================================
 
 template<class T, class Tr>
+    requires (!std::is_same_v<Tr, always_empty<T>>)
 constexpr bool operator==(const optional<T, Tr>& lhs, const std::optional<T>& rhs) {
     if (lhs.has_value() != rhs.has_value()) {
         return false;
@@ -825,6 +879,7 @@ constexpr bool operator==(const optional<T, Tr>& lhs, const std::optional<T>& rh
 }
 
 template<class T, class Tr>
+    requires (!std::is_same_v<Tr, always_empty<T>>)
 constexpr bool operator==(const std::optional<T>& lhs, const optional<T, Tr>& rhs) {
     return rhs == lhs;
 }

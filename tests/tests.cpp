@@ -1430,6 +1430,37 @@ TEST(always_empty_hash) {
     ASSERT(h(o) == static_cast<size_t>(-1));
 }
 
+TEST(always_empty_eq_self) {
+    slim::optional<int, slim::always_empty<int>> a, b;
+    ASSERT(a == b);
+    ASSERT(!(a != b));
+    ASSERT((a <=> b) == std::strong_ordering::equal);
+}
+
+TEST(always_empty_eq_nullopt) {
+    slim::optional<int, slim::always_empty<int>> a;
+    ASSERT(a == slim::nullopt);
+    ASSERT(slim::nullopt == a);
+}
+
+TEST(always_empty_eq_normal_optional) {
+    slim::optional<int, slim::always_empty<int>> ae;
+    slim::optional<int> empty = slim::nullopt;
+    slim::optional<int> engaged(42);
+    ASSERT(ae == empty);
+    ASSERT(empty == ae);
+    ASSERT(!(ae == engaged));
+    ASSERT(!(engaged == ae));
+}
+
+TEST(always_empty_eq_std_optional) {
+    slim::optional<int, slim::always_empty<int>> ae;
+    std::optional<int> empty;
+    std::optional<int> engaged(42);
+    ASSERT(ae == empty);
+    ASSERT(!(ae == engaged));
+}
+
 TEST(always_empty_if_constexpr_use_case) {
     auto lookup = []<class T>() {
         if constexpr (std::is_integral_v<T>) {
@@ -1628,6 +1659,10 @@ int main() {
     RUN_TEST(always_empty_and_then_returns_empty);
     RUN_TEST(always_empty_or_else_runs_lambda);
     RUN_TEST(always_empty_hash);
+    RUN_TEST(always_empty_eq_self);
+    RUN_TEST(always_empty_eq_nullopt);
+    RUN_TEST(always_empty_eq_normal_optional);
+    RUN_TEST(always_empty_eq_std_optional);
     RUN_TEST(always_empty_if_constexpr_use_case);
 
     std::cout << "\n======================================\n";
