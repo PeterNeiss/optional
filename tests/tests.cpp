@@ -299,7 +299,7 @@ TEST(sentinel_monadic_and_then) {
 TEST(sentinel_monadic_or_else) {
     optional<int*> empty = nullopt;
     int y = 99;
-    auto result = empty.or_else([&y]() -> optional<int*> {
+    auto result = empty.or_else([&y](const auto&) -> optional<int*> {
         return &y;
     });
     ASSERT(result.has_value());

@@ -284,7 +284,7 @@ void example_monadic() {
 
     // or_else
     optional<int*> empty_opt;
-    auto fallback = empty_opt.or_else([]() -> optional<int*> {
+    auto fallback = empty_opt.or_else([](const auto&) -> optional<int*> {
         static int default_val = 99;
         return &default_val;
     });

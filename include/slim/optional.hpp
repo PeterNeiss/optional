@@ -103,7 +103,10 @@ protected:
 
 // Unsigned integers (excluding bool, char8_t)
 template<class T>
-    requires (std::unsigned_integral<T> && !std::same_as<T, bool> && !std::same_as<T, char8_t>)
+    requires (std::unsigned_integral<T> && !std::same_as<T, bool>
+              && !std::same_as<T, char8_t>
+              && !std::same_as<T, char16_t>
+              && !std::same_as<T, char32_t>)
 struct sentinel_traits<T>
 {
 protected:
@@ -383,11 +386,15 @@ public:
         validate_not_sentinel(value_);
     }
 
-    // Construct from another optional with different T
-    template<class U>
-        requires (std::is_constructible_v<T, const U&>)
+    // Construct from another optional with different T and/or Traits.
+    // The validate_not_sentinel call is retained because *other may be a
+    // legitimate value under TrU's traits but happen to coincide with this
+    // optional's sentinel under Traits.
+    template<class U, class TrU>
+        requires (!(std::same_as<U, T> && std::same_as<TrU, Traits>) &&
+                  std::is_constructible_v<T, const U&>)
     constexpr explicit(!std::is_convertible_v<const U&, T>)
-    optional(const optional<U>& other)
+    optional(const optional<U, TrU>& other)
         : value_(other.has_value() ? *other : Traits::sentinel())
     {
         if (has_value()) {
@@ -395,10 +402,11 @@ public:
         }
     }
 
-    template<class U>
-        requires (std::is_constructible_v<T, U&&>)
+    template<class U, class TrU>
+        requires (!(std::same_as<U, T> && std::same_as<TrU, Traits>) &&
+                  std::is_constructible_v<T, U&&>)
     constexpr explicit(!std::is_convertible_v<U&&, T>)
-    optional(optional<U>&& other)
+    optional(optional<U, TrU>&& other)
         : value_(other.has_value() ? std::move(*other) : Traits::sentinel())
     {
         if (has_value()) {
@@ -459,10 +467,11 @@ public:
         return *this;
     }
 
-    template<class U>
-        requires (std::is_constructible_v<T, const U&> &&
+    template<class U, class TrU>
+        requires (!(std::same_as<U, T> && std::same_as<TrU, Traits>) &&
+                  std::is_constructible_v<T, const U&> &&
                   std::is_assignable_v<T&, const U&>)
-    constexpr optional& operator=(const optional<U>& other) {
+    constexpr optional& operator=(const optional<U, TrU>& other) {
         if (other.has_value()) {
             value_ = *other;
             validate_not_sentinel(value_);
@@ -472,10 +481,11 @@ public:
         return *this;
     }
 
-    template<class U>
-        requires (std::is_constructible_v<T, U> &&
+    template<class U, class TrU>
+        requires (!(std::same_as<U, T> && std::same_as<TrU, Traits>) &&
+                  std::is_constructible_v<T, U> &&
                   std::is_assignable_v<T&, U>)
-    constexpr optional& operator=(optional<U>&& other) {
+    constexpr optional& operator=(optional<U, TrU>&& other) {
         if (other.has_value()) {
             value_ = std::move(*other);
             validate_not_sentinel(value_);
@@ -667,7 +677,16 @@ public:
     template<class F>
     constexpr auto transform(F&& f) & {
         using U = std::remove_cvref_t<std::invoke_result_t<F, T&>>;
-        if constexpr (has_sentinel_traits<U>) {
+        if constexpr (std::same_as<U, T>) {
+            // Propagate Traits when result type matches.
+            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(value_)};
+            if constexpr (std::same_as<Traits, never_empty<T>>) {
+                // unreachable: a never_empty optional always has a value
+                return optional<U, Traits>{std::forward<F>(f)(value_)};
+            } else {
+                return optional<U, Traits>(nullopt);
+            }
+        } else if constexpr (has_sentinel_traits<U>) {
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(value_)};
             } else {
@@ -685,7 +704,14 @@ public:
     template<class F>
     constexpr auto transform(F&& f) const & {
         using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
-        if constexpr (has_sentinel_traits<U>) {
+        if constexpr (std::same_as<U, T>) {
+            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(value_)};
+            if constexpr (std::same_as<Traits, never_empty<T>>) {
+                return optional<U, Traits>{std::forward<F>(f)(value_)};
+            } else {
+                return optional<U, Traits>(nullopt);
+            }
+        } else if constexpr (has_sentinel_traits<U>) {
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(value_)};
             } else {
@@ -703,7 +729,14 @@ public:
     template<class F>
     constexpr auto transform(F&& f) && {
         using U = std::remove_cvref_t<std::invoke_result_t<F, T&&>>;
-        if constexpr (has_sentinel_traits<U>) {
+        if constexpr (std::same_as<U, T>) {
+            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
+            if constexpr (std::same_as<Traits, never_empty<T>>) {
+                return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
+            } else {
+                return optional<U, Traits>(nullopt);
+            }
+        } else if constexpr (has_sentinel_traits<U>) {
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(std::move(value_))};
             } else {
@@ -721,7 +754,14 @@ public:
     template<class F>
     constexpr auto transform(F&& f) const && {
         using U = std::remove_cvref_t<std::invoke_result_t<F, const T&&>>;
-        if constexpr (has_sentinel_traits<U>) {
+        if constexpr (std::same_as<U, T>) {
+            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
+            if constexpr (std::same_as<Traits, never_empty<T>>) {
+                return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
+            } else {
+                return optional<U, Traits>(nullopt);
+            }
+        } else if constexpr (has_sentinel_traits<U>) {
             if (has_value()) {
                 return optional<U>{std::forward<F>(f)(std::move(value_))};
             } else {
@@ -736,21 +776,29 @@ public:
         }
     }
 
+    // or_else: invokes f with the Traits subobject so the recovery callable
+    // can use trait-provided constants/helpers when fabricating a fallback.
+    // f must be invocable as f(Traits const&) and return something
+    // convertible to optional.
     template<class F>
+        requires std::is_invocable_v<F, const Traits&> &&
+                 std::is_convertible_v<std::invoke_result_t<F, const Traits&>, optional>
     constexpr optional or_else(F&& f) const & {
         if (has_value()) {
             return *this;
         } else {
-            return std::forward<F>(f)();
+            return std::forward<F>(f)(static_cast<const Traits&>(*this));
         }
     }
 
     template<class F>
+        requires std::is_invocable_v<F, const Traits&> &&
+                 std::is_convertible_v<std::invoke_result_t<F, const Traits&>, optional>
     constexpr optional or_else(F&& f) && {
         if (has_value()) {
             return std::move(*this);
         } else {
-            return std::forward<F>(f)();
+            return std::forward<F>(f)(static_cast<const Traits&>(*this));
         }
     }
 };
@@ -876,6 +924,19 @@ constexpr optional<T> make_optional(Args&&... args) {
     return optional<T>(in_place, std::forward<Args>(args)...);
 }
 
+// Trait-aware overloads: explicitly select the Traits parameter.
+template<class T, class Traits, class U>
+    requires std::is_constructible_v<T, U&&>
+constexpr optional<T, Traits> make_optional(U&& value) {
+    return optional<T, Traits>(std::forward<U>(value));
+}
+
+template<class T, class Traits, class... Args>
+    requires std::is_constructible_v<T, Args...>
+constexpr optional<T, Traits> make_optional(Args&&... args) {
+    return optional<T, Traits>(in_place, std::forward<Args>(args)...);
+}
+
 // Deduction guide
 template<class T>
 optional(T) -> optional<T>;
@@ -902,33 +963,41 @@ struct hash<slim::optional<T, Tr>> {
     }
 };
 
-// numeric_limits for slim::optional — reflects the reduced valid range
-template<class T>
+// numeric_limits for slim::optional — reflects the reduced valid range when
+// the default sentinel traits are used. For never_empty<T> (no value is
+// reserved) the limits are inherited unchanged.
+template<class T, class Tr>
     requires slim::has_sentinel_traits<T> && numeric_limits<T>::is_specialized
-struct numeric_limits<slim::optional<T>> : numeric_limits<T> {
+struct numeric_limits<slim::optional<T, Tr>> : numeric_limits<T> {
+private:
+    static constexpr bool reserves_value =
+        std::same_as<Tr, slim::sentinel_traits<T>>;
+public:
     static constexpr T min() noexcept {
-        if constexpr (std::signed_integral<T>)
+        if constexpr (reserves_value && std::signed_integral<T>)
             return numeric_limits<T>::min() + 1;
         else
             return numeric_limits<T>::min();
     }
 
     static constexpr T lowest() noexcept {
-        if constexpr (std::signed_integral<T>)
+        if constexpr (reserves_value && std::signed_integral<T>)
             return numeric_limits<T>::min() + 1;
         else
             return numeric_limits<T>::lowest();
     }
 
     static constexpr T max() noexcept {
-        if constexpr (std::unsigned_integral<T> || std::same_as<T, char16_t> || std::same_as<T, char32_t>)
+        if constexpr (reserves_value && (std::unsigned_integral<T> || std::same_as<T, char16_t> || std::same_as<T, char32_t>))
             return numeric_limits<T>::max() - 1;
         else
             return numeric_limits<T>::max();
     }
 
-    static constexpr bool has_quiet_NaN = std::floating_point<T> ? false : numeric_limits<T>::has_quiet_NaN;
-    static constexpr bool has_signaling_NaN = std::floating_point<T> ? false : numeric_limits<T>::has_signaling_NaN;
+    static constexpr bool has_quiet_NaN =
+        (reserves_value && std::floating_point<T>) ? false : numeric_limits<T>::has_quiet_NaN;
+    static constexpr bool has_signaling_NaN =
+        (reserves_value && std::floating_point<T>) ? false : numeric_limits<T>::has_signaling_NaN;
 };
 
 } // namespace std
