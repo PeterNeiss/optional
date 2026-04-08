@@ -78,6 +78,23 @@ protected:
     static constexpr bool is_sentinel(const T&) noexcept { return false; }
 };
 
+// Dual escape-hatch: a "always-empty" traits. When used as the Traits
+// parameter of slim::optional, the optional has no T storage at all
+// (sizeof == 1) and reports has_value()==false unconditionally. Useful for
+// conditional return types in templates that, on one branch, structurally
+// never produce a value:
+//
+//     if constexpr (cacheable) return slim::optional<T>{...};
+//     else                     return slim::optional<T, slim::always_empty<T>>{};
+//
+// Callers can branch on the type and the no-value branch costs zero bytes.
+template<typename T>
+struct always_empty {
+protected:
+    static T sentinel() = delete;  // never invoked — specialization has no value_
+    static constexpr bool is_sentinel(const T&) noexcept { return true; }
+};
+
 // ── Scalar specializations ──
 //
 // Every built-in specialization makes sentinel()/is_sentinel() protected.
@@ -669,6 +686,105 @@ public:
 };
 
 // ============================================================================
+// optional<T, always_empty<T>> — partial specialization with no T storage
+// ============================================================================
+//
+// This specialization carries no value_ member. sizeof is 1 (the empty-class
+// minimum); under [[no_unique_address]] it disappears entirely. has_value()
+// is unconditionally false. Member functions that would require a stored T
+// (operator*, operator->, in-place / value-taking constructors, emplace,
+// operator=(T), swap of values) are deliberately *not provided* — calling
+// any of them is a compile error, which is exactly the diagnostic you want
+// when the if-constexpr branch you're in shouldn't have produced a value.
+//
+// Use with `if constexpr` to pick this branch in templated return types:
+//   if constexpr (cond) return slim::optional<T>{...};
+//   else                return slim::optional<T, slim::always_empty<T>>{};
+template<class T>
+class optional<T, always_empty<T>> : public always_empty<T> {
+public:
+    using value_type = T;
+    using traits_type = always_empty<T>;
+    static constexpr bool can_be_empty = true;
+
+    constexpr optional() noexcept = default;
+    constexpr optional(nullopt_t) noexcept {}
+    constexpr optional(const optional&) noexcept = default;
+    constexpr optional(optional&&) noexcept = default;
+
+    // Convert from any other optional (slim or std). The source value is
+    // discarded — this branch structurally never holds a value.
+    template<class U, class TrU>
+    constexpr optional(const optional<U, TrU>&) noexcept {}
+    template<class U, class TrU>
+    constexpr optional(optional<U, TrU>&&) noexcept {}
+    template<class U>
+    constexpr optional(const std::optional<U>&) noexcept {}
+    template<class U>
+    constexpr optional(std::optional<U>&&) noexcept {}
+
+    constexpr ~optional() = default;
+
+    constexpr optional& operator=(nullopt_t) noexcept { return *this; }
+    constexpr optional& operator=(const optional&) noexcept = default;
+    constexpr optional& operator=(optional&&) noexcept = default;
+    template<class U, class TrU>
+    constexpr optional& operator=(const optional<U, TrU>&) noexcept { return *this; }
+    template<class U, class TrU>
+    constexpr optional& operator=(optional<U, TrU>&&) noexcept { return *this; }
+
+    // Convert to std::optional — always nullopt.
+    constexpr operator std::optional<T>() const noexcept { return std::nullopt; }
+
+    constexpr bool has_value() const noexcept { return false; }
+    constexpr explicit operator bool() const noexcept { return false; }
+
+    [[noreturn]] constexpr T value() const {
+        throw bad_optional_access("always_empty optional has no value");
+    }
+
+    template<class U>
+        requires std::is_convertible_v<U, T>
+    constexpr T value_or(U&& default_value) const {
+        return static_cast<T>(std::forward<U>(default_value));
+    }
+
+    constexpr void reset() noexcept {}
+
+    constexpr void swap(optional&) noexcept {}
+
+    // Monadic operations: trivially short-circuit. The lambdas are never
+    // invoked — only their return type is used to compute the result type.
+    template<class F>
+        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, const T&>>> &&
+                 (!detail::is_never_empty_optional_v<std::remove_cvref_t<std::invoke_result_t<F, const T&>>>)
+    constexpr auto and_then(F&&) const {
+        using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
+        return U(std::nullopt);
+    }
+
+    template<class F>
+    constexpr auto transform(F&&) const {
+        using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
+        if constexpr (has_sentinel_traits<U>) {
+            return optional<U>(nullopt);
+        } else {
+            return std::optional<U>(std::nullopt);
+        }
+    }
+
+    // or_else: the lambda may run for side effects, but its return value is
+    // structurally another always_empty optional, so we always return *this.
+    template<class F>
+        requires std::is_invocable_v<F, const always_empty<T>&> &&
+                 std::is_convertible_v<std::invoke_result_t<F, const always_empty<T>&>, optional>
+    constexpr optional or_else(F&& f) const {
+        (void)std::forward<F>(f)(static_cast<const always_empty<T>&>(*this));
+        return *this;
+    }
+};
+
+// ============================================================================
 // Comparison operators — optional vs optional
 // ============================================================================
 
@@ -817,6 +933,14 @@ struct hash<slim::optional<T, Tr>> {
             return static_cast<size_t>(-1);
         }
         return hash<T>{}(*opt);
+    }
+};
+
+// Hash specialization for always_empty optional — does not require hash<T>.
+template<class T>
+struct hash<slim::optional<T, slim::always_empty<T>>> {
+    constexpr size_t operator()(const slim::optional<T, slim::always_empty<T>>&) const noexcept {
+        return static_cast<size_t>(-1);
     }
 };
 

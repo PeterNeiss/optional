@@ -1356,6 +1356,95 @@ TEST(or_else_receives_traits) {
     ASSERT(*r == 99);
 }
 
+// always_empty tests --------------------------------------------------------
+template<class O> concept has_emplace_int = requires(O o) { o.emplace(1); };
+template<class O> concept has_value_ctor_int = requires { O(1); };
+
+TEST(always_empty_size_is_one) {
+    static_assert(sizeof(slim::optional<int, slim::always_empty<int>>) == 1);
+    static_assert(sizeof(slim::optional<std::string, slim::always_empty<std::string>>) == 1);
+}
+
+TEST(always_empty_has_value_false) {
+    slim::optional<int, slim::always_empty<int>> o;
+    ASSERT(!o.has_value());
+    ASSERT(!o);
+    slim::optional<int, slim::always_empty<int>> o2 = slim::nullopt;
+    ASSERT(!o2.has_value());
+}
+
+TEST(always_empty_value_throws) {
+    slim::optional<int, slim::always_empty<int>> o;
+    ASSERT_THROWS(o.value(), bad_optional_access);
+}
+
+TEST(always_empty_value_or) {
+    slim::optional<int, slim::always_empty<int>> o;
+    ASSERT(o.value_or(42) == 42);
+}
+
+TEST(always_empty_no_value_constructor) {
+    using AE = slim::optional<int, slim::always_empty<int>>;
+    static_assert(!has_value_ctor_int<AE>);
+    static_assert(!has_emplace_int<AE>);
+}
+
+TEST(always_empty_converts_from_other_optional) {
+    slim::optional<int> src(42);
+    slim::optional<int, slim::always_empty<int>> dst(src);
+    ASSERT(!dst.has_value());
+}
+
+TEST(always_empty_converts_to_std_optional) {
+    slim::optional<int, slim::always_empty<int>> o;
+    std::optional<int> std_o = o;
+    ASSERT(!std_o.has_value());
+}
+
+TEST(always_empty_transform_returns_empty) {
+    slim::optional<int, slim::always_empty<int>> o;
+    auto r = o.transform([](int x) { return x + 1; });
+    ASSERT(!r.has_value());
+}
+
+TEST(always_empty_and_then_returns_empty) {
+    slim::optional<int, slim::always_empty<int>> o;
+    auto r = o.and_then([](int x) { return slim::optional<int>(x + 1); });
+    ASSERT(!r.has_value());
+}
+
+TEST(always_empty_or_else_runs_lambda) {
+    slim::optional<int, slim::always_empty<int>> o;
+    bool ran = false;
+    auto r = o.or_else([&ran](const auto&) {
+        ran = true;
+        return slim::optional<int, slim::always_empty<int>>{};
+    });
+    ASSERT(ran);
+    ASSERT(!r.has_value());
+}
+
+TEST(always_empty_hash) {
+    std::hash<slim::optional<int, slim::always_empty<int>>> h;
+    slim::optional<int, slim::always_empty<int>> o;
+    ASSERT(h(o) == static_cast<size_t>(-1));
+}
+
+TEST(always_empty_if_constexpr_use_case) {
+    auto lookup = []<class T>() {
+        if constexpr (std::is_integral_v<T>) {
+            return slim::optional<T>(42);
+        } else {
+            return slim::optional<T, slim::always_empty<T>>{};
+        }
+    };
+    auto a = lookup.template operator()<int>();
+    auto b = lookup.template operator()<std::string>();
+    static_assert(sizeof(b) == 1);
+    ASSERT(a.has_value());
+    ASSERT(!b.has_value());
+}
+
 TEST(deduction_guide_in_place) {
     slim::optional o{slim::in_place, 42};
     static_assert(std::same_as<decltype(o), slim::optional<int>>);
@@ -1526,6 +1615,20 @@ int main() {
     RUN_TEST(numeric_limits_never_empty);
     RUN_TEST(or_else_receives_traits);
     RUN_TEST(deduction_guide_in_place);
+
+    std::cout << "\nalways_empty:\n";
+    RUN_TEST(always_empty_size_is_one);
+    RUN_TEST(always_empty_has_value_false);
+    RUN_TEST(always_empty_value_throws);
+    RUN_TEST(always_empty_value_or);
+    RUN_TEST(always_empty_no_value_constructor);
+    RUN_TEST(always_empty_converts_from_other_optional);
+    RUN_TEST(always_empty_converts_to_std_optional);
+    RUN_TEST(always_empty_transform_returns_empty);
+    RUN_TEST(always_empty_and_then_returns_empty);
+    RUN_TEST(always_empty_or_else_runs_lambda);
+    RUN_TEST(always_empty_hash);
+    RUN_TEST(always_empty_if_constexpr_use_case);
 
     std::cout << "\n======================================\n";
     std::cout << "All tests passed successfully!\n";

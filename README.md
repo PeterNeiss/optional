@@ -71,18 +71,37 @@ slim::optional in{slim::in_place, 42};  // also deduces optional<int>
 - **`can_be_empty`** is a `static constexpr bool` member that's `false` only
   for the `never_empty` escape hatch.
 
-### Escape hatch: `never_empty`
+### Escape hatches: `never_empty` and `always_empty`
 
-For containers of `T` where you want the smaller representation but never
-need an empty state, use `slim::never_empty<T>` as the second template
-parameter. Methods that would create an empty state (`reset()`, assignment
-from `nullopt`) are SFINAE-disabled at compile time.
+Two type-level traits let you fix an optional's state at compile time.
+
+**`never_empty<T>`** — the optional always holds a value. Methods that would
+create an empty state (`reset()`, assignment from `nullopt`) are
+SFINAE-disabled.
 
 ```cpp
 slim::optional<int, slim::never_empty<int>> always_engaged{42};
 // always_engaged.reset();      // compile error
 // always_engaged = nullopt;    // compile error
 ```
+
+**`always_empty<T>`** — the optional structurally never holds a value, and
+**carries no `T` storage at all**: `sizeof == 1`. Useful in `if constexpr`
+branches where the templated return type is "the same shape" as a regular
+optional, but on this branch you statically never produce one:
+
+```cpp
+template<class T>
+auto lookup() {
+    if constexpr (is_cacheable_v<T>) return slim::optional<T>{...};
+    else                              return slim::optional<T, slim::always_empty<T>>{};
+}
+```
+
+Value-taking constructors, `emplace()`, `operator*`, and `operator->` are
+not provided — calling any of them is a compile error. `value()` throws,
+`value_or()` returns the default, `transform`/`and_then` short-circuit to
+empty.
 
 ## Supported types
 
