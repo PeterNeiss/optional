@@ -40,11 +40,48 @@ Requires GCC 13+ or Clang 17+.
 
 ## API
 
-The full `std::optional` interface — constructors, `value()`, `value_or()`, `operator*`, `operator->`, `reset()`, `emplace()`, `swap()`, and the C++23 monadic operations (`and_then`, `transform`, `or_else`). Plus CTAD:
+Mostly mirrors `std::optional`: constructors, `value()`, `value_or()`, `operator*`, `operator->`, `reset()`, `emplace()`, `swap()`, and the C++23 monadic operations (`and_then`, `transform`, `or_else`). Plus CTAD:
 
 ```cpp
 slim::optional opt(42);            // deduces optional<int>
 auto opt2 = slim::make_optional(&x);
+slim::optional in{slim::in_place, 42};  // also deduces optional<int>
+```
+
+### Differences from `std::optional`
+
+- **`or_else` callable receives the `Traits` object.** Recovery lambdas are
+  invoked as `f(const Traits&)` so they can use trait-provided helpers when
+  fabricating a fallback. Migrating from `[]{ return ...; }` to
+  `[](const auto&){ return ...; }` is a one-line change.
+- **Move-from does not disengage the source.** Because the empty state is a
+  sentinel value rather than a separate flag, moving the value out leaves the
+  source holding a moved-from `T` but with `has_value() == true`. Use the new
+  `take()` method when you specifically want move-and-reset semantics:
+  ```cpp
+  slim::optional<std::unique_ptr<Foo>> opt(std::make_unique<Foo>());
+  auto p = opt.take();   // p owns the Foo; opt is now empty.
+  ```
+- **`bad_optional_access` inherits from `std::bad_optional_access`**, so
+  `catch (const std::bad_optional_access&)` catches both.
+- **`slim::nullopt_t` and `slim::in_place_t` are aliases for the std types**,
+  so `std::nullopt` and `std::in_place` work interchangeably.
+- **`sentinel_value()`** is a public static accessor returning the trait's
+  sentinel — useful for C-API interop where you need the same magic value.
+- **`can_be_empty`** is a `static constexpr bool` member that's `false` only
+  for the `never_empty` escape hatch.
+
+### Escape hatch: `never_empty`
+
+For containers of `T` where you want the smaller representation but never
+need an empty state, use `slim::never_empty<T>` as the second template
+parameter. Methods that would create an empty state (`reset()`, assignment
+from `nullopt`) are SFINAE-disabled at compile time.
+
+```cpp
+slim::optional<int, slim::never_empty<int>> always_engaged{42};
+// always_engaged.reset();      // compile error
+// always_engaged = nullopt;    // compile error
 ```
 
 ## Supported types
@@ -78,7 +115,10 @@ These work out of the box via built-in `sentinel_traits` specializations:
 
 ## Custom types
 
-Specialize `sentinel_traits` in namespace `slim` to opt in your own types:
+Specialize `sentinel_traits` in namespace `slim` to opt in your own types.
+Mark `sentinel()` and `is_sentinel()` as `protected` — `slim::optional`
+inherits from your traits and accesses these as a base class, while
+preventing arbitrary external callers from poking at them:
 
 ```cpp
 enum class FileHandle : int { INVALID = -1, STDIN = 0, STDOUT = 1 };
@@ -86,6 +126,7 @@ enum class FileHandle : int { INVALID = -1, STDIN = 0, STDOUT = 1 };
 namespace slim {
 template<>
 struct sentinel_traits<FileHandle> {
+protected:
     static constexpr FileHandle sentinel() noexcept { return FileHandle::INVALID; }
     static constexpr bool is_sentinel(const FileHandle& v) noexcept {
         return v == FileHandle::INVALID;
@@ -95,6 +136,18 @@ struct sentinel_traits<FileHandle> {
 
 slim::optional<FileHandle> fd;           // 4 bytes (std::optional<FileHandle> = 8)
 fd = FileHandle::STDOUT;
+```
+
+You can also pass a custom traits as the second template parameter without
+specializing `sentinel_traits` at all:
+
+```cpp
+struct EmptyStringIsEmpty {
+protected:
+    static std::string sentinel() { return std::string{}; }
+    static bool is_sentinel(const std::string& s) noexcept { return s.empty(); }
+};
+slim::optional<std::string, EmptyStringIsEmpty> name;
 ```
 
 ## std::optional interop

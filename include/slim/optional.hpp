@@ -27,11 +27,12 @@
 
 namespace slim {
 
-// Exception type
-class bad_optional_access : public std::exception {
+// Exception type — inherits from std::bad_optional_access so user code that
+// catches the standard type also catches ours.
+class bad_optional_access : public std::bad_optional_access {
     const char* msg_;
 public:
-    explicit bad_optional_access(const char* msg = "bad optional access")
+    explicit bad_optional_access(const char* msg = "bad optional access") noexcept
         : msg_(msg) {}
 
     const char* what() const noexcept override {
@@ -39,19 +40,12 @@ public:
     }
 };
 
-// Nullopt type
-struct nullopt_t {
-    explicit constexpr nullopt_t(int) noexcept {}
-};
-
-inline constexpr nullopt_t nullopt{0};
-
-// In-place construction tag
-struct in_place_t {
-    explicit in_place_t() = default;
-};
-
-inline constexpr in_place_t in_place{};
+// Tag types — aliased to the std equivalents so a single set of constructor
+// overloads handles both `slim::nullopt` and `std::nullopt`.
+using nullopt_t = std::nullopt_t;
+inline constexpr std::nullopt_t nullopt = std::nullopt;
+using in_place_t = std::in_place_t;
+inline constexpr std::in_place_t in_place{};
 
 // ============================================================================
 // sentinel_traits<T>: customization point for sentinel values.
@@ -312,6 +306,12 @@ namespace detail {
 template<class> inline constexpr bool is_optional_v = false;
 template<class T, class Tr> inline constexpr bool is_optional_v<optional<T, Tr>> = true;
 template<class T> inline constexpr bool is_optional_v<std::optional<T>> = true;
+
+// Detects slim::optional<T, never_empty<T>> — used to forbid such results
+// from monadic operations whose empty branch cannot construct one.
+template<class> inline constexpr bool is_never_empty_optional_v = false;
+template<class T>
+inline constexpr bool is_never_empty_optional_v<optional<T, never_empty<T>>> = true;
 }
 
 // Publicly inherits from Traits so any public members users attach to
@@ -328,9 +328,26 @@ class optional : public Traits {
         }
     }
 
+    static_assert(has_sentinel_traits<T> || !std::same_as<Traits, sentinel_traits<T>>,
+        "slim::optional<T>: no sentinel_traits<T> specialization is visible. "
+        "Either provide one, supply a custom Traits as the second template "
+        "parameter, or use slim::optional<T, slim::never_empty<T>>.");
+
 public:
     using value_type = T;
     using traits_type = Traits;
+
+    // True iff this optional has a representable empty state. False only for
+    // the never_empty escape-hatch traits.
+    static constexpr bool can_be_empty = !std::same_as<Traits, never_empty<T>>;
+
+    // Public accessor for the trait's sentinel value (the bit pattern that
+    // means "empty"). Useful for interop with C APIs that need the sentinel.
+    static constexpr T sentinel_value() noexcept(noexcept(Traits::sentinel()))
+        requires (can_be_empty)
+    {
+        return Traits::sentinel();
+    }
 
     // Default constructor — trivial whenever T is trivially default
     // constructible. In that case value_ is left in T's default-initialized
@@ -346,11 +363,7 @@ public:
         : value_(Traits::sentinel()) {}
 
     constexpr optional(nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
-      requires (!std::same_as<Traits, never_empty<T>>)
-        : value_(Traits::sentinel()) {}
-
-    constexpr optional(std::nullopt_t) noexcept(noexcept(T(Traits::sentinel())))
-      requires (!std::same_as<Traits, never_empty<T>>)
+      requires (can_be_empty)
         : value_(Traits::sentinel()) {}
 
     constexpr optional(const optional& other) = default;
@@ -364,20 +377,10 @@ public:
         validate_not_sentinel(value_);
     }
 
-    template<class... Args>
-        requires std::is_constructible_v<T, Args...>
-    constexpr explicit optional(std::in_place_t, Args&&... args)
-        : value_(std::forward<Args>(args)...)
-    {
-        validate_not_sentinel(value_);
-    }
-
     template<class U = T>
         requires (!std::same_as<std::remove_cvref_t<U>, optional> &&
                   !std::same_as<std::remove_cvref_t<U>, in_place_t> &&
-                  !std::same_as<std::remove_cvref_t<U>, std::in_place_t> &&
                   !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
-                  !std::same_as<std::remove_cvref_t<U>, std::nullopt_t> &&
                   std::is_constructible_v<T, U>)
     constexpr explicit(!std::is_convertible_v<U, T>)
     optional(U&& value)
@@ -441,14 +444,7 @@ public:
 
     // Assignment
     constexpr optional& operator=(nullopt_t) noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
-      requires (!std::same_as<Traits, never_empty<T>>)
-    {
-        value_ = Traits::sentinel();
-        return *this;
-    }
-
-    constexpr optional& operator=(std::nullopt_t) noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
-      requires (!std::same_as<Traits, never_empty<T>>)
+      requires (can_be_empty)
     {
         value_ = Traits::sentinel();
         return *this;
@@ -539,85 +535,67 @@ public:
         return has_value();
     }
 
-    constexpr const T& value() const & {
-        if (!has_value()) {
+    // value() / operator* / operator-> use C++23 deducing-this so a single
+    // function template covers all four cv/ref qualifications.
+    template<class Self>
+    constexpr auto&& value(this Self&& self) {
+        if (!self.has_value()) {
             throw bad_optional_access("optional has no value");
         }
-        return value_;
+        return std::forward<Self>(self).value_;
     }
 
-    constexpr T& value() & {
-        if (!has_value()) {
-            throw bad_optional_access("optional has no value");
-        }
-        return value_;
+    template<class Self>
+    constexpr auto&& operator*(this Self&& self) noexcept {
+        return std::forward<Self>(self).value_;
     }
 
-    constexpr const T&& value() const && {
-        if (!has_value()) {
-            throw bad_optional_access("optional has no value");
-        }
-        return std::move(value_);
+    template<class Self>
+    constexpr auto operator->(this Self&& self) noexcept {
+        return std::addressof(self.value_);
     }
 
-    constexpr T&& value() && {
-        if (!has_value()) {
-            throw bad_optional_access("optional has no value");
-        }
-        return std::move(value_);
-    }
-
-    constexpr const T* operator->() const noexcept {
-        return std::addressof(value_);
-    }
-
-    constexpr T* operator->() noexcept {
-        return std::addressof(value_);
-    }
-
-    constexpr const T& operator*() const & noexcept {
-        return value_;
-    }
-
-    constexpr T& operator*() & noexcept {
-        return value_;
-    }
-
-    constexpr const T&& operator*() const && noexcept {
-        return std::move(value_);
-    }
-
-    constexpr T&& operator*() && noexcept {
-        return std::move(value_);
-    }
-
-    template<class U>
-        requires std::is_copy_constructible_v<T> &&
-                 std::is_convertible_v<U, T>
-    constexpr T value_or(U&& default_value) const & {
-        return has_value() ? value_ : static_cast<T>(std::forward<U>(default_value));
-    }
-
-    template<class U>
-        requires std::is_move_constructible_v<T> &&
-                 std::is_convertible_v<U, T>
-    constexpr T value_or(U&& default_value) && {
-        return has_value() ? std::move(value_) : static_cast<T>(std::forward<U>(default_value));
+    template<class Self, class U>
+        requires std::is_convertible_v<U, T>
+    constexpr T value_or(this Self&& self, U&& default_value) {
+        return self.has_value()
+            ? static_cast<T>(std::forward<Self>(self).value_)
+            : static_cast<T>(std::forward<U>(default_value));
     }
 
     // Modifiers
     constexpr void reset() noexcept(noexcept(std::declval<T&>() = Traits::sentinel()))
+        requires (can_be_empty)
     {
         value_ = Traits::sentinel();
     }
 
     template<class... Args>
         requires std::is_constructible_v<T, Args...>
-    constexpr T& emplace(Args&&... args) {
+    constexpr T& emplace(Args&&... args)
+    {
+        // Not noexcept: validate_not_sentinel can throw bad_optional_access
+        // when args... happens to construct the sentinel. Construct into a
+        // temporary first so that if construction or validation throws,
+        // value_ is left untouched (strong exception guarantee).
         T tmp(std::forward<Args>(args)...);
         validate_not_sentinel(tmp);
         value_ = std::move(tmp);
         return value_;
+    }
+
+    // Move the value out and reset to empty. Unlike a plain move, this
+    // guarantees has_value() == false afterwards — useful given that
+    // sentinel-based moves do not normally disengage the source.
+    constexpr T take()
+        requires (can_be_empty && std::is_move_constructible_v<T>)
+    {
+        if (!has_value()) {
+            throw bad_optional_access("optional has no value");
+        }
+        T out = std::move(value_);
+        value_ = Traits::sentinel();
+        return out;
     }
 
     // Swap
@@ -629,147 +607,45 @@ public:
         swap(value_, other.value_);
     }
 
-    // Monadic operations (C++23)
-    template<class F>
-        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, T&>>>
-    constexpr auto and_then(F&& f) & {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, T&>>;
-        if (has_value()) {
-            return std::forward<F>(f)(value_);
+    // Monadic operations (C++23) — single deducing-this template per op.
+    template<class Self, class F>
+        requires detail::is_optional_v<std::remove_cvref_t<
+                     std::invoke_result_t<F, decltype(std::declval<Self>().value_)>>> &&
+                 (!detail::is_never_empty_optional_v<std::remove_cvref_t<
+                     std::invoke_result_t<F, decltype(std::declval<Self>().value_)>>>)
+    constexpr auto and_then(this Self&& self, F&& f) {
+        using U = std::remove_cvref_t<
+            std::invoke_result_t<F, decltype(std::forward<Self>(self).value_)>>;
+        if (self.has_value()) {
+            return std::forward<F>(f)(std::forward<Self>(self).value_);
         } else {
             return U(std::nullopt);
         }
     }
 
-    template<class F>
-        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, const T&>>>
-    constexpr auto and_then(F&& f) const & {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
-        if (has_value()) {
-            return std::forward<F>(f)(value_);
-        } else {
-            return U(std::nullopt);
-        }
-    }
-
-    template<class F>
-        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, T&&>>>
-    constexpr auto and_then(F&& f) && {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, T&&>>;
-        if (has_value()) {
-            return std::forward<F>(f)(std::move(value_));
-        } else {
-            return U(std::nullopt);
-        }
-    }
-
-    template<class F>
-        requires detail::is_optional_v<std::remove_cvref_t<std::invoke_result_t<F, const T&&>>>
-    constexpr auto and_then(F&& f) const && {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, const T&&>>;
-        if (has_value()) {
-            return std::forward<F>(f)(std::move(value_));
-        } else {
-            return U(std::nullopt);
-        }
-    }
-
-    template<class F>
-    constexpr auto transform(F&& f) & {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, T&>>;
+    template<class Self, class F>
+    constexpr auto transform(this Self&& self, F&& f) {
+        using U = std::remove_cvref_t<
+            std::invoke_result_t<F, decltype(std::forward<Self>(self).value_)>>;
         if constexpr (std::same_as<U, T>) {
             // Propagate Traits when result type matches.
-            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(value_)};
+            if (self.has_value())
+                return optional<U, Traits>{std::forward<F>(f)(std::forward<Self>(self).value_)};
             if constexpr (std::same_as<Traits, never_empty<T>>) {
                 // unreachable: a never_empty optional always has a value
-                return optional<U, Traits>{std::forward<F>(f)(value_)};
+                return optional<U, Traits>{std::forward<F>(f)(std::forward<Self>(self).value_)};
             } else {
                 return optional<U, Traits>(nullopt);
             }
         } else if constexpr (has_sentinel_traits<U>) {
-            if (has_value()) {
-                return optional<U>{std::forward<F>(f)(value_)};
+            if (self.has_value()) {
+                return optional<U>{std::forward<F>(f)(std::forward<Self>(self).value_)};
             } else {
                 return optional<U>(nullopt);
             }
         } else {
-            if (has_value()) {
-                return std::optional<U>{std::forward<F>(f)(value_)};
-            } else {
-                return std::optional<U>(std::nullopt);
-            }
-        }
-    }
-
-    template<class F>
-    constexpr auto transform(F&& f) const & {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, const T&>>;
-        if constexpr (std::same_as<U, T>) {
-            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(value_)};
-            if constexpr (std::same_as<Traits, never_empty<T>>) {
-                return optional<U, Traits>{std::forward<F>(f)(value_)};
-            } else {
-                return optional<U, Traits>(nullopt);
-            }
-        } else if constexpr (has_sentinel_traits<U>) {
-            if (has_value()) {
-                return optional<U>{std::forward<F>(f)(value_)};
-            } else {
-                return optional<U>(nullopt);
-            }
-        } else {
-            if (has_value()) {
-                return std::optional<U>{std::forward<F>(f)(value_)};
-            } else {
-                return std::optional<U>(std::nullopt);
-            }
-        }
-    }
-
-    template<class F>
-    constexpr auto transform(F&& f) && {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, T&&>>;
-        if constexpr (std::same_as<U, T>) {
-            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
-            if constexpr (std::same_as<Traits, never_empty<T>>) {
-                return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
-            } else {
-                return optional<U, Traits>(nullopt);
-            }
-        } else if constexpr (has_sentinel_traits<U>) {
-            if (has_value()) {
-                return optional<U>{std::forward<F>(f)(std::move(value_))};
-            } else {
-                return optional<U>(nullopt);
-            }
-        } else {
-            if (has_value()) {
-                return std::optional<U>{std::forward<F>(f)(std::move(value_))};
-            } else {
-                return std::optional<U>(std::nullopt);
-            }
-        }
-    }
-
-    template<class F>
-    constexpr auto transform(F&& f) const && {
-        using U = std::remove_cvref_t<std::invoke_result_t<F, const T&&>>;
-        if constexpr (std::same_as<U, T>) {
-            if (has_value()) return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
-            if constexpr (std::same_as<Traits, never_empty<T>>) {
-                return optional<U, Traits>{std::forward<F>(f)(std::move(value_))};
-            } else {
-                return optional<U, Traits>(nullopt);
-            }
-        } else if constexpr (has_sentinel_traits<U>) {
-            if (has_value()) {
-                return optional<U>{std::forward<F>(f)(std::move(value_))};
-            } else {
-                return optional<U>(nullopt);
-            }
-        } else {
-            if (has_value()) {
-                return std::optional<U>{std::forward<F>(f)(std::move(value_))};
+            if (self.has_value()) {
+                return std::optional<U>{std::forward<F>(f)(std::forward<Self>(self).value_)};
             } else {
                 return std::optional<U>(std::nullopt);
             }
@@ -780,25 +656,14 @@ public:
     // can use trait-provided constants/helpers when fabricating a fallback.
     // f must be invocable as f(Traits const&) and return something
     // convertible to optional.
-    template<class F>
+    template<class Self, class F>
         requires std::is_invocable_v<F, const Traits&> &&
                  std::is_convertible_v<std::invoke_result_t<F, const Traits&>, optional>
-    constexpr optional or_else(F&& f) const & {
-        if (has_value()) {
-            return *this;
+    constexpr optional or_else(this Self&& self, F&& f) {
+        if (self.has_value()) {
+            return std::forward<Self>(self);
         } else {
-            return std::forward<F>(f)(static_cast<const Traits&>(*this));
-        }
-    }
-
-    template<class F>
-        requires std::is_invocable_v<F, const Traits&> &&
-                 std::is_convertible_v<std::invoke_result_t<F, const Traits&>, optional>
-    constexpr optional or_else(F&& f) && {
-        if (has_value()) {
-            return std::move(*this);
-        } else {
-            return std::forward<F>(f)(static_cast<const Traits&>(*this));
+            return std::forward<F>(f)(static_cast<const Traits&>(self));
         }
     }
 };
@@ -868,17 +733,7 @@ constexpr bool operator==(const optional<T, Tr>& opt, nullopt_t) noexcept {
 }
 
 template<class T, class Tr>
-constexpr bool operator==(const optional<T, Tr>& opt, std::nullopt_t) noexcept {
-    return !opt.has_value();
-}
-
-template<class T, class Tr>
 constexpr std::strong_ordering operator<=>(const optional<T, Tr>& opt, nullopt_t) noexcept {
-    return opt.has_value() <=> false;
-}
-
-template<class T, class Tr>
-constexpr std::strong_ordering operator<=>(const optional<T, Tr>& opt, std::nullopt_t) noexcept {
     return opt.has_value() <=> false;
 }
 
@@ -888,8 +743,7 @@ constexpr std::strong_ordering operator<=>(const optional<T, Tr>& opt, std::null
 
 template<class T, class Tr, class U>
     requires (!detail::is_optional_v<std::remove_cvref_t<U>> &&
-              !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
-              !std::same_as<std::remove_cvref_t<U>, std::nullopt_t>)
+              !std::same_as<std::remove_cvref_t<U>, nullopt_t>)
 constexpr bool operator==(const optional<T, Tr>& opt, const U& value) {
     return opt.has_value() && (*opt == value);
 }
@@ -897,7 +751,6 @@ constexpr bool operator==(const optional<T, Tr>& opt, const U& value) {
 template<class T, class Tr, class U>
     requires (!detail::is_optional_v<std::remove_cvref_t<U>> &&
               !std::same_as<std::remove_cvref_t<U>, nullopt_t> &&
-              !std::same_as<std::remove_cvref_t<U>, std::nullopt_t> &&
               std::three_way_comparable_with<T, U>)
 constexpr std::compare_three_way_result_t<T, U> operator<=>(const optional<T, Tr>& opt, const U& value) {
     return opt.has_value() ? *opt <=> value : std::strong_ordering::less;
@@ -937,9 +790,12 @@ constexpr optional<T, Traits> make_optional(Args&&... args) {
     return optional<T, Traits>(in_place, std::forward<Args>(args)...);
 }
 
-// Deduction guide
+// Deduction guides
 template<class T>
 optional(T) -> optional<T>;
+
+template<class T, class... Args>
+optional(in_place_t, T, Args...) -> optional<T>;
 
 // ============================================================================
 // Hash support
@@ -957,7 +813,8 @@ struct hash<slim::optional<T, Tr>> {
         requires requires { hash<T>{}(std::declval<T>()); }
     {
         if (!opt.has_value()) {
-            return 0;
+            // Distinct sentinel hash to reduce collision with hash<T>{}(T{}).
+            return static_cast<size_t>(-1);
         }
         return hash<T>{}(*opt);
     }

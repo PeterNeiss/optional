@@ -473,7 +473,7 @@ TEST(hash_support) {
     std::hash<optional<int*>> hasher;
 
     ASSERT(hasher(opt1) == hasher(opt2));
-    ASSERT(hasher(empty) == 0);
+    ASSERT(hasher(empty) == static_cast<size_t>(-1));
 
     // Hash of optional should match hash of value
     ASSERT(hasher(opt1) == std::hash<int*>{}(&x));
@@ -1237,6 +1237,147 @@ TEST(void_traits_no_overhead) {
 // Main test runner
 // ============================================================================
 
+// ============================================================================
+// New-feature tests (improvements batch)
+// ============================================================================
+
+TEST(can_be_empty_constant) {
+    static_assert(slim::optional<int*>::can_be_empty);
+    static_assert(!slim::optional<int, slim::never_empty<int>>::can_be_empty);
+}
+
+TEST(sentinel_value_accessor) {
+    static_assert(slim::optional<int*>::sentinel_value() == nullptr);
+    static_assert(slim::optional<int>::sentinel_value() ==
+                  std::numeric_limits<int>::min());
+}
+
+template<class O>
+concept has_reset = requires(O o) { o.reset(); };
+template<class O>
+concept assignable_from_nullopt = requires(O o) { o = slim::nullopt; };
+
+TEST(reset_disabled_for_never_empty) {
+    using NE = slim::optional<int, slim::never_empty<int>>;
+    static_assert(has_reset<slim::optional<int*>>);
+    static_assert(!has_reset<NE>);
+    static_assert(assignable_from_nullopt<slim::optional<int*>>);
+    static_assert(!assignable_from_nullopt<NE>);
+}
+
+TEST(take_resets_optional) {
+    slim::optional<int*> o;
+    int x = 42;
+    o = &x;
+    int* taken = o.take();
+    ASSERT(taken == &x);
+    ASSERT(!o.has_value());
+}
+
+TEST(take_throws_when_empty) {
+    slim::optional<int*> o = slim::nullopt;
+    ASSERT_THROWS(o.take(), bad_optional_access);
+}
+
+TEST(bad_optional_access_catches_as_std) {
+    bool caught = false;
+    try {
+        slim::optional<int*> empty = slim::nullopt;
+        (void)empty.value();
+    } catch (const std::bad_optional_access&) {
+        caught = true;
+    }
+    ASSERT(caught);
+}
+
+TEST(emplace_strong_guarantee) {
+    struct Throwy {
+        int v;
+        Throwy(int x, bool should_throw) : v(x) {
+            if (should_throw) throw std::runtime_error("nope");
+        }
+    };
+    struct ThrowyTraits {
+    protected:
+        static Throwy sentinel() noexcept { return Throwy{-1, false}; }
+        static bool is_sentinel(const Throwy& t) noexcept { return t.v == -1; }
+    };
+    slim::optional<Throwy, ThrowyTraits> o(slim::in_place, 100, false);
+    ASSERT(o.has_value());
+    ASSERT(o->v == 100);
+    bool threw = false;
+    try {
+        o.emplace(200, true);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    ASSERT(threw);
+    // Strong guarantee: optional is unchanged.
+    ASSERT(o.has_value());
+    ASSERT(o->v == 100);
+}
+
+TEST(transform_propagates_traits) {
+    using NE = slim::optional<int, slim::never_empty<int>>;
+    NE o(slim::in_place, 5);
+    auto r = o.transform([](int x) { return x + 1; });
+    static_assert(std::same_as<decltype(r), NE>);
+    ASSERT(*r == 6);
+}
+
+TEST(cross_traits_conversion) {
+    slim::optional<int, slim::never_empty<int>> ne(slim::in_place, 42);
+    slim::optional<int> normal(ne);
+    ASSERT(normal.has_value());
+    ASSERT(*normal == 42);
+    slim::optional<int, slim::never_empty<int>> back(normal);
+    ASSERT(back.has_value());
+    ASSERT(*back == 42);
+}
+
+TEST(numeric_limits_never_empty) {
+    using NE = slim::optional<int, slim::never_empty<int>>;
+    static_assert(std::numeric_limits<NE>::max() == std::numeric_limits<int>::max());
+    static_assert(std::numeric_limits<NE>::min() == std::numeric_limits<int>::min());
+}
+
+TEST(or_else_receives_traits) {
+    struct PublicTraits {
+    public:
+        static constexpr int sentinel() noexcept { return -1; }
+        static constexpr bool is_sentinel(const int& v) noexcept { return v == -1; }
+        static constexpr int recovery() noexcept { return 99; }
+    };
+    slim::optional<int, PublicTraits> o = slim::nullopt;
+    auto r = o.or_else([](const PublicTraits& tr) {
+        return slim::optional<int, PublicTraits>(tr.recovery());
+    });
+    ASSERT(r.has_value());
+    ASSERT(*r == 99);
+}
+
+TEST(deduction_guide_in_place) {
+    slim::optional o{slim::in_place, 42};
+    static_assert(std::same_as<decltype(o), slim::optional<int>>);
+    ASSERT(*o == 42);
+}
+
+// ABI guarantees — locked in via static_assert
+static_assert(sizeof(slim::optional<int8_t>) == sizeof(int8_t));
+static_assert(sizeof(slim::optional<int16_t>) == sizeof(int16_t));
+static_assert(sizeof(slim::optional<int32_t>) == sizeof(int32_t));
+static_assert(sizeof(slim::optional<int64_t>) == sizeof(int64_t));
+static_assert(sizeof(slim::optional<uint8_t>) == sizeof(uint8_t));
+static_assert(sizeof(slim::optional<uint16_t>) == sizeof(uint16_t));
+static_assert(sizeof(slim::optional<uint32_t>) == sizeof(uint32_t));
+static_assert(sizeof(slim::optional<uint64_t>) == sizeof(uint64_t));
+static_assert(sizeof(slim::optional<float>) == sizeof(float));
+static_assert(sizeof(slim::optional<double>) == sizeof(double));
+static_assert(sizeof(slim::optional<long double>) == sizeof(long double));
+static_assert(sizeof(slim::optional<int*>) == sizeof(int*));
+static_assert(sizeof(slim::optional<char16_t>) == sizeof(char16_t));
+static_assert(sizeof(slim::optional<char32_t>) == sizeof(char32_t));
+
 int main() {
     std::cout << "Running optional Tests\n";
     std::cout << "======================================\n\n";
@@ -1371,6 +1512,20 @@ int main() {
     RUN_TEST(sentinel_traits_std_optional_interop);
     RUN_TEST(traits_public_inheritance);
     RUN_TEST(void_traits_no_overhead);
+
+    std::cout << "\nImprovements batch:\n";
+    RUN_TEST(can_be_empty_constant);
+    RUN_TEST(sentinel_value_accessor);
+    RUN_TEST(reset_disabled_for_never_empty);
+    RUN_TEST(take_resets_optional);
+    RUN_TEST(take_throws_when_empty);
+    RUN_TEST(bad_optional_access_catches_as_std);
+    RUN_TEST(emplace_strong_guarantee);
+    RUN_TEST(transform_propagates_traits);
+    RUN_TEST(cross_traits_conversion);
+    RUN_TEST(numeric_limits_never_empty);
+    RUN_TEST(or_else_receives_traits);
+    RUN_TEST(deduction_guide_in_place);
 
     std::cout << "\n======================================\n";
     std::cout << "All tests passed successfully!\n";
